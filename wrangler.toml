@@ -1,11 +1,10 @@
-name = "drama-video-api"
+name = "mini-app"
 main = "video-api-worker.js"
 compatibility_date = "2023-01-01"
 
 [vars]
-# Ini hanya contoh, Anda tetap perlu mengatur di Cloudflare dashboard
-# SUPABASE_URL = "https://your-project.supabase.co"
-# SUPABASE_ANON_KEY = "your-anon-key"
+SUPABASE_URL = "https://wpjfojsfkcgppprvzwoh.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwamZvanNma2NncHBwcnZ6d29oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTUwNDIsImV4cCI6MjA3MTMzMTA0Mn0.P877Kg2muBOMiqV7YxolL821gNKRo1vrgUPag_tdzwM"
 
 [env.production]
-account_id = "4298fcc787e5229647ed981ba9de380b"  # Ganti dengan Cloudflare account ID Anda
+account_id = "4298fcc787e5229647ed981ba9de380b"
