@@ -21,13 +21,13 @@ class VideoPlayerApp {
         
         // State variables
         this.isVideoPlaying = false;
-        this.isControlsVisible = true;
+        this.isControlsVisible = false; // Start hidden
         this.controlsTimeout = null;
         this.videoDuration = 0;
         this.lastVolume = 0.7;
         
-        // Setup keyboard shortcuts
-        this.setupKeyboardShortcuts();
+        // Initialize with controls hidden
+        this.hideControls();
     }
     
     // Get URL parameter
@@ -56,21 +56,11 @@ class VideoPlayerApp {
             return false;
         });
         
-        // Disable long press on mobile
-        document.addEventListener('touchstart', (e) => {
-            if (e.touches.length > 1) {
-                e.preventDefault();
-            }
-        }, { passive: false });
-        
-        let lastTouchEnd = 0;
-        document.addEventListener('touchend', (e) => {
-            const now = (new Date()).getTime();
-            if (now - lastTouchEnd <= 300) {
-                e.preventDefault();
-            }
-            lastTouchEnd = now;
-        }, false);
+        // Set user-select on body
+        document.body.style.userSelect = 'none';
+        document.body.style.webkitUserSelect = 'none';
+        document.body.style.mozUserSelect = 'none';
+        document.body.style.msUserSelect = 'none';
         
         // Disable copy/paste
         document.addEventListener('copy', (e) => {
@@ -82,18 +72,13 @@ class VideoPlayerApp {
             e.preventDefault();
             return false;
         });
-        
-        // Set user-select on body
-        document.body.style.userSelect = 'none';
-        document.body.style.webkitUserSelect = 'none';
-        document.body.style.mozUserSelect = 'none';
-        document.body.style.msUserSelect = 'none';
     }
     
     // Initialize DOM elements
     initializeElements() {
         // Video elements
         this.videoPlayer = document.getElementById('videoPlayer');
+        this.videoContainer = document.getElementById('videoContainer');
         this.videoTitle = document.getElementById('videoTitle');
         this.overlayTitle = document.getElementById('overlayTitle');
         this.videoDescription = document.getElementById('videoDescription');
@@ -144,13 +129,6 @@ class VideoPlayerApp {
         this.videoPlayer.addEventListener('dragstart', (e) => {
             e.preventDefault();
             return false;
-        });
-        
-        // Prevent opening video in new tab
-        document.addEventListener('click', (e) => {
-            if (e.target.tagName === 'VIDEO') {
-                e.preventDefault();
-            }
         });
     }
     
@@ -218,11 +196,6 @@ class VideoPlayerApp {
         this.videoPlayer.addEventListener('error', this.handleVideoError.bind(this));
         this.videoPlayer.addEventListener('volumechange', this.handleVolumeChange.bind(this));
         this.videoPlayer.addEventListener('waiting', this.handleVideoWaiting.bind(this));
-        this.videoPlayer.addEventListener('progress', this.handleVideoProgress.bind(this));
-        this.videoPlayer.addEventListener('loadstart', this.handleVideoLoadStart.bind(this));
-        this.videoPlayer.addEventListener('stalled', this.handleVideoStalled.bind(this));
-        this.videoPlayer.addEventListener('abort', this.handleVideoAbort.bind(this));
-        this.videoPlayer.addEventListener('canplaythrough', this.handleVideoCanPlayThrough.bind(this));
         
         // Control button events
         this.playPauseButton.addEventListener('click', this.togglePlayPause.bind(this));
@@ -232,30 +205,47 @@ class VideoPlayerApp {
         this.retryButton.addEventListener('click', this.retryLoading.bind(this));
         this.backButton.addEventListener('click', this.goBack.bind(this));
         
-        // Progress bar events
+        // Progress bar events - FIXED
         this.progressContainer.addEventListener('click', this.seekToPosition.bind(this));
         
         // Volume control events
         this.volumeSlider.addEventListener('input', this.adjustVolume.bind(this));
         
-        // Video player click events
-        this.videoPlayer.addEventListener('click', this.toggleControlsVisibility.bind(this));
-        this.controlsOverlay.addEventListener('click', (e) => e.stopPropagation());
+        // Video player click events - FIXED
+        this.videoPlayer.addEventListener('click', () => {
+            this.togglePlayPause();
+            this.showControls();
+        });
         
-        // Touch/mouse events for controls visibility
-        document.addEventListener('mousemove', this.showControls.bind(this));
-        document.addEventListener('touchstart', this.showControls.bind(this));
+        // Video container hover events - FIXED
+        this.videoContainer.addEventListener('mouseenter', () => {
+            this.showControls();
+        });
+        
+        this.videoContainer.addEventListener('mouseleave', () => {
+            if (this.isVideoPlaying) {
+                this.hideControlsAfterDelay();
+            }
+        });
+        
+        // Touch events for mobile
+        this.videoContainer.addEventListener('touchstart', () => {
+            this.showControls();
+            this.hideControlsAfterDelay();
+        });
+        
+        // Control overlay click - prevent video click
+        this.controlsOverlay.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
         
         // Fullscreen events
         document.addEventListener('fullscreenchange', this.handleFullscreenChange.bind(this));
         document.addEventListener('webkitfullscreenchange', this.handleFullscreenChange.bind(this));
         document.addEventListener('mozfullscreenchange', this.handleFullscreenChange.bind(this));
         
-        // Orientation change
-        window.addEventListener('orientationchange', this.handleOrientationChange.bind(this));
-        
-        // Page visibility
-        document.addEventListener('visibilitychange', this.handleVisibilityChange.bind(this));
+        // Keyboard shortcuts
+        this.setupKeyboardShortcuts();
     }
     
     // Setup keyboard shortcuts
@@ -265,38 +255,38 @@ class VideoPlayerApp {
                 case ' ':
                 case 'k':
                     this.togglePlayPause();
+                    this.showControls();
                     e.preventDefault();
                     break;
                 case 'f':
                     this.toggleFullscreen();
+                    this.showControls();
                     e.preventDefault();
                     break;
                 case 'ArrowLeft':
                     this.rewindVideo();
+                    this.showControls();
                     e.preventDefault();
                     break;
                 case 'ArrowRight':
                     this.forwardVideo();
+                    this.showControls();
                     e.preventDefault();
                     break;
                 case 'm':
                     this.toggleMute();
+                    this.showControls();
                     e.preventDefault();
                     break;
                 case 'ArrowUp':
                     this.increaseVolume();
+                    this.showControls();
                     e.preventDefault();
                     break;
                 case 'ArrowDown':
                     this.decreaseVolume();
+                    this.showControls();
                     e.preventDefault();
-                    break;
-                case 'Escape':
-                    if (document.fullscreenElement || 
-                        document.webkitFullscreenElement || 
-                        document.mozFullScreenElement) {
-                        this.exitFullscreen();
-                    }
                     break;
             }
         });
@@ -312,6 +302,18 @@ class VideoPlayerApp {
     handleVideoCanPlay() {
         this.loadingIndicator.style.display = 'none';
         console.log('Video can play');
+        
+        // Set initial volume
+        this.videoPlayer.volume = this.lastVolume;
+        this.volumeSlider.value = this.lastVolume;
+        
+        // Show controls briefly when video is ready
+        this.showControls();
+        setTimeout(() => {
+            if (this.isVideoPlaying) {
+                this.hideControls();
+            }
+        }, 2000);
     }
     
     handleVideoPlaying() {
@@ -354,31 +356,6 @@ class VideoPlayerApp {
         }
     }
     
-    handleVideoProgress() {
-        // Monitor download progress
-        console.log('Video progress event');
-    }
-    
-    handleVideoLoadStart() {
-        // Reset security attributes when loading starts
-        this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
-        this.videoPlayer.disableRemotePlayback = true;
-        this.videoPlayer.setAttribute('crossorigin', 'anonymous');
-    }
-    
-    handleVideoStalled() {
-        console.log('Video loading stalled');
-    }
-    
-    handleVideoAbort() {
-        this.showError('Video loading was aborted.');
-        this.loadingIndicator.style.display = 'none';
-    }
-    
-    handleVideoCanPlayThrough() {
-        console.log('Video can play through');
-    }
-    
     handleVolumeChange() {
         this.volumeSlider.value = this.videoPlayer.volume;
         this.lastVolume = this.videoPlayer.volume;
@@ -388,26 +365,26 @@ class VideoPlayerApp {
         // Update UI for fullscreen if needed
     }
     
-    handleOrientationChange() {
-        // Reset controls visibility on orientation change
-        this.showControls();
-    }
-    
-    handleVisibilityChange() {
-        if (document.hidden && this.isVideoPlaying) {
-            this.videoPlayer.pause();
-        }
-    }
-    
     // ========== CONTROL FUNCTIONS ==========
     
     togglePlayPause() {
         if (this.videoPlayer.paused || this.videoPlayer.ended) {
-            this.videoPlayer.play();
+            this.videoPlayer.play()
+                .then(() => {
+                    this.isVideoPlaying = true;
+                    this.playIcon.style.display = 'none';
+                    this.pauseIcon.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error playing video:', error);
+                    this.showError('Cannot play video. Please check your connection.');
+                });
         } else {
             this.videoPlayer.pause();
+            this.isVideoPlaying = false;
+            this.playIcon.style.display = 'block';
+            this.pauseIcon.style.display = 'none';
         }
-        this.showControls();
     }
     
     toggleFullscreen() {
@@ -415,12 +392,12 @@ class VideoPlayerApp {
             !document.webkitFullscreenElement && 
             !document.mozFullScreenElement) {
             // Enter fullscreen
-            if (document.documentElement.requestFullscreen) {
-                document.documentElement.requestFullscreen();
-            } else if (document.documentElement.webkitRequestFullscreen) {
-                document.documentElement.webkitRequestFullscreen();
-            } else if (document.documentElement.mozRequestFullScreen) {
-                document.documentElement.mozRequestFullScreen();
+            if (this.videoContainer.requestFullscreen) {
+                this.videoContainer.requestFullscreen();
+            } else if (this.videoContainer.webkitRequestFullscreen) {
+                this.videoContainer.webkitRequestFullscreen();
+            } else if (this.videoContainer.mozRequestFullScreen) {
+                this.videoContainer.mozRequestFullScreen();
             }
         } else {
             // Exit fullscreen
@@ -433,16 +410,6 @@ class VideoPlayerApp {
             }
         }
         this.showControls();
-    }
-    
-    exitFullscreen() {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        } else if (document.webkitExitFullscreen) {
-            document.webkitExitFullscreen();
-        } else if (document.mozCancelFullScreen) {
-            document.mozCancelFullScreen();
-        }
     }
     
     rewindVideo() {
@@ -505,9 +472,7 @@ class VideoPlayerApp {
         } else if (window.history.length > 1) {
             window.history.back();
         } else {
-            // Close window or show message
             console.log('No previous page in history');
-            // You could implement a custom navigation here
         }
     }
     
@@ -541,23 +506,10 @@ class VideoPlayerApp {
     
     // ========== CONTROLS VISIBILITY ==========
     
-    toggleControlsVisibility() {
-        if (this.isControlsVisible) {
-            this.hideControls();
-        } else {
-            this.showControls();
-        }
-    }
-    
     showControls() {
-        this.controlsOverlay.style.opacity = '1';
-        this.controlsOverlay.style.pointerEvents = 'all';
+        this.controlsOverlay.classList.add('show-controls');
         this.isControlsVisible = true;
         
-        this.hideControlsAfterDelay();
-    }
-    
-    hideControlsAfterDelay() {
         clearTimeout(this.controlsTimeout);
         if (this.isVideoPlaying) {
             this.controlsTimeout = setTimeout(() => {
@@ -568,9 +520,17 @@ class VideoPlayerApp {
     
     hideControls() {
         if (this.isVideoPlaying) {
-            this.controlsOverlay.style.opacity = '0';
-            this.controlsOverlay.style.pointerEvents = 'none';
+            this.controlsOverlay.classList.remove('show-controls');
             this.isControlsVisible = false;
+        }
+    }
+    
+    hideControlsAfterDelay() {
+        clearTimeout(this.controlsTimeout);
+        if (this.isVideoPlaying) {
+            this.controlsTimeout = setTimeout(() => {
+                this.hideControls();
+            }, 3000);
         }
     }
 }
@@ -579,16 +539,7 @@ class VideoPlayerApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.videoPlayerApp = new VideoPlayerApp();
     
-    // Additional R2 video handling
-    const videoPlayer = document.getElementById('videoPlayer');
-    
-    // Ensure video player is properly configured for R2 streaming
-    videoPlayer.setAttribute('preload', 'metadata');
-    videoPlayer.setAttribute('playsinline', 'true');
-    videoPlayer.setAttribute('webkit-playsinline', 'true');
-    videoPlayer.setAttribute('crossorigin', 'anonymous');
-    
-    // Handle orientation lock and ensure responsive behavior
+    // Handle orientation change
     window.addEventListener('orientationchange', () => {
         setTimeout(() => {
             document.body.style.height = '100vh';
