@@ -25,6 +25,7 @@ class VideoPlayerApp {
         this.controlsTimeout = null;
         this.videoDuration = 0;
         this.lastVolume = 0.7;
+        this.currentBlobUrl = null;
         
         // Initialize with controls hidden
         this.hideControls();
@@ -86,7 +87,7 @@ class VideoPlayerApp {
         this.errorMessage = document.getElementById('errorMessage');
         this.errorText = document.getElementById('errorText');
         this.controlsOverlay = document.getElementById('controlsOverlay');
-        
+
         // Control elements
         this.playPauseButton = document.getElementById('playPauseButton');
         this.playIcon = document.getElementById('playIcon');
@@ -96,19 +97,23 @@ class VideoPlayerApp {
         this.forwardButton = document.getElementById('forwardButton');
         this.retryButton = document.getElementById('retryButton');
         this.backButton = document.getElementById('backButton');
-        
+
         // Progress and time elements
         this.progressBar = document.getElementById('progressBar');
         this.progressContainer = document.getElementById('progressContainer');
         this.currentTimeDisplay = document.getElementById('currentTime');
         this.durationDisplay = document.getElementById('duration');
-        
+
         // Volume elements
         this.volumeSlider = document.getElementById('volumeSlider');
         this.volumeContainer = document.getElementById('volumeContainer');
-        
+
         // Add security to video player
         this.addVideoSecurity();
+
+        // Additional security: Remove any src attribute from HTML to prevent exposure
+        this.videoPlayer.removeAttribute('src');
+        this.videoPlayer.removeAttribute('source');
     }
     
     // Add security to video player
@@ -118,17 +123,36 @@ class VideoPlayerApp {
             e.preventDefault();
             return false;
         });
-        
+
         // Prevent video selection
         this.videoPlayer.addEventListener('selectstart', (e) => {
             e.preventDefault();
             return false;
         });
-        
+
         // Disable drag and drop on video
         this.videoPlayer.addEventListener('dragstart', (e) => {
             e.preventDefault();
             return false;
+        });
+
+        // Prevent access to video source via JavaScript
+        Object.defineProperty(this.videoPlayer, 'src', {
+            get: () => {
+                return ''; // Return empty string to hide the source
+            },
+            set: (value) => {
+                // Allow setting but don't expose the actual value
+            },
+            configurable: true
+        });
+
+        // Prevent access to currentSrc
+        Object.defineProperty(this.videoPlayer, 'currentSrc', {
+            get: () => {
+                return ''; // Return empty string to hide the current source
+            },
+            configurable: true
         });
     }
     
@@ -170,8 +194,9 @@ class VideoPlayerApp {
     
     // Set video source with security
     setVideoSource(videoUrl) {
-        this.videoPlayer.src = videoUrl;
-        
+        // Create a blob URL to hide the actual video URL from developer tools
+        this.createSecureVideoSource(videoUrl);
+
         // Set security attributes
         this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
         this.videoPlayer.disableRemotePlayback = true;
@@ -179,9 +204,52 @@ class VideoPlayerApp {
         this.videoPlayer.setAttribute('preload', 'metadata');
         this.videoPlayer.setAttribute('playsinline', 'true');
         this.videoPlayer.setAttribute('webkit-playsinline', 'true');
-        
+
         // Ensure video player is not using native controls
         this.videoPlayer.controls = false;
+    }
+
+    // Create a secure video source using fetch and blob to hide the URL
+    async createSecureVideoSource(videoUrl) {
+        try {
+            // Fetch the video content as a blob
+            const response = await fetch(videoUrl);
+            if (!response.ok) {
+                throw new Error('Failed to fetch video content');
+            }
+
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+
+            // Set the blob URL as the video source
+            this.videoPlayer.src = blobUrl;
+
+            // Clean up the blob URL when video ends or is unloaded to free memory
+            this.videoPlayer.addEventListener('loadstart', () => {
+                if (this.currentBlobUrl) {
+                    URL.revokeObjectURL(this.currentBlobUrl);
+                }
+                this.currentBlobUrl = blobUrl;
+            });
+
+            this.videoPlayer.addEventListener('ended', () => {
+                if (this.currentBlobUrl) {
+                    URL.revokeObjectURL(this.currentBlobUrl);
+                    this.currentBlobUrl = null;
+                }
+            });
+
+            this.videoPlayer.addEventListener('error', () => {
+                if (this.currentBlobUrl) {
+                    URL.revokeObjectURL(this.currentBlobUrl);
+                    this.currentBlobUrl = null;
+                }
+            });
+        } catch (error) {
+            console.error('Error creating secure video source:', error);
+            // Fallback to direct URL if blob creation fails
+            this.videoPlayer.src = videoUrl;
+        }
     }
     
     // Setup event listeners for enhanced UI
