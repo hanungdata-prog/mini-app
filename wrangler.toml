@@ -8,4 +8,4 @@ compatibility_date = "2023-01-01"
 # SUPABASE_ANON_KEY = "your-anon-key"
 
 [env.production]
-account_id = "your-account-id"  # Ganti dengan Cloudflare account ID Anda
+account_id = "4298fcc787e5229647ed981ba9de380b"  # Ganti dengan Cloudflare account ID Anda
