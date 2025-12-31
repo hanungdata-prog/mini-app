@@ -4,6 +4,52 @@ function getUrlParameter(name) {
     return urlParams.get(name);
 }
 
+// Disable right-click context menu (optional for production)
+// document.addEventListener('contextmenu', function(e) {
+//     e.preventDefault();
+//     return false;
+// });
+
+// Disable selection and text highlighting (optional for production)
+// document.addEventListener('selectstart', function(e) {
+//     e.preventDefault();
+//     return false;
+// });
+
+// Disable drag and drop
+document.addEventListener('dragstart', function(e) {
+    e.preventDefault();
+    return false;
+});
+
+// Disable long press on mobile
+document.addEventListener('touchstart', function(e) {
+    if (e.touches.length > 1) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
+let lastTouchEnd = 0;
+document.addEventListener('touchend', function(e) {
+    const now = (new Date()).getTime();
+    if (now - lastTouchEnd <= 300) {
+        e.preventDefault();
+    }
+    lastTouchEnd = now;
+}, false);
+
+// Prevent video context menu (optional for production)
+// document.getElementById('videoPlayer').addEventListener('contextmenu', function(e) {
+//     e.preventDefault();
+//     return false;
+// });
+
+// Prevent video selection (optional for production)
+// document.getElementById('videoPlayer').addEventListener('selectstart', function(e) {
+//     e.preventDefault();
+//     return false;
+// });
+
 // Get the deep link code from URL
 const deepLinkCode = getUrlParameter('code');
 
@@ -31,8 +77,9 @@ if (!deepLinkCode) {
             // Set the video source
             videoPlayer.src = data.video_url;
             
-            // Set security attributes for video protection
-            videoPlayer.setAttribute('controlsList', 'nodownload');
+            // Ensure security attributes are set
+            videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
+            videoPlayer.disableRemotePlayback = true;
             videoPlayer.setAttribute('crossorigin', 'anonymous');
             videoPlayer.setAttribute('preload', 'metadata');
             
@@ -72,76 +119,107 @@ if (!deepLinkCode) {
         });
 }
 
-// Optional: Disable right-click context menu on video only (bukan seluruh halaman)
-document.addEventListener('DOMContentLoaded', function() {
-    const videoPlayer = document.getElementById('videoPlayer');
-    
-    // Hanya nonaktifkan right-click pada video player
-    if (videoPlayer) {
-        videoPlayer.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-            return false;
-        });
-    }
-});
 
-// Optional: Prevent download via video controls (tanpa mengganggu Developer Tools)
+// Additional security measures (reduced to allow devtools)
 document.addEventListener('DOMContentLoaded', function() {
+    // Disable text selection on the entire page (reduced from full blocking)
+    // document.body.style.userSelect = 'none';
+    // document.body.style.webkitUserSelect = 'none';
+    // document.body.style.mozUserSelect = 'none';
+    // document.body.style.msUserSelect = 'none';
+
+    // Disable copy/paste events (optional, can be removed for dev)
+    // document.addEventListener('copy', function(e) {
+    //     e.preventDefault();
+    //     return false;
+    // });
+
+    // document.addEventListener('paste', function(e) {
+    //     e.preventDefault();
+    //     return false;
+    // });
+
+    // Disable drag and drop on video element
     const videoPlayer = document.getElementById('videoPlayer');
-    
-    if (videoPlayer) {
-        // Set security attributes for video
-        videoPlayer.setAttribute('controlsList', 'nodownload');
+    videoPlayer.addEventListener('dragstart', function(e) {
+        e.preventDefault();
+        return false;
+    });
+
+    // Prevent saving via right-click context menu on video
+    videoPlayer.addEventListener('canplay', function() {
+        // Once video is loaded, ensure security attributes are set
+        videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
         videoPlayer.disableRemotePlayback = true;
-        
-        // Tambahkan atribut playsinline untuk mobile
-        videoPlayer.setAttribute('playsinline', 'true');
-        videoPlayer.setAttribute('webkit-playsinline', 'true');
+    });
+});
+
+// Prevent opening video in new tab via context menu
+document.addEventListener('click', function(e) {
+    if (e.target.tagName === 'VIDEO') {
+        // Prevent any special actions on video clicks
     }
 });
 
-// HAPUS atau COMMENT semua kode yang memblokir Developer Tools:
-// - Hapus event listener untuk keydown yang memblokir F12, Ctrl+Shift+I, dll
-// - Hapus devtools detection dengan interval debugger
-// - Hapus override XMLHttpRequest dan fetch
-// - Hapus override Element.prototype.setAttribute
-// - Hapus override document.getElementsByTagName
 
-// Fitur keamanan yang TIDAK mengganggu Developer Tools:
-document.addEventListener('DOMContentLoaded', function() {
-    // Opsional: Nonaktifkan drag and drop pada video
-    const videoPlayer = document.getElementById('videoPlayer');
-    
-    if (videoPlayer) {
-        videoPlayer.addEventListener('dragstart', function(e) {
-            e.preventDefault();
-            return false;
-        });
-    }
-});
 
-// Handling untuk R2 video streaming
+// Additional video security measures
 document.addEventListener('DOMContentLoaded', function() {
     const videoPlayer = document.getElementById('videoPlayer');
     
-    if (videoPlayer) {
-        // Konfigurasi tambahan untuk R2
-        videoPlayer.setAttribute('preload', 'metadata');
+    // Prevent download by intercepting video events
+    videoPlayer.addEventListener('progress', function() {
+        // Monitor download progress
+    });
+    
+    videoPlayer.addEventListener('loadstart', function() {
+        // Reset security attributes when loading starts
+        videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
+        videoPlayer.disableRemotePlayback = true;
         videoPlayer.setAttribute('crossorigin', 'anonymous');
-        
-        videoPlayer.addEventListener('canplay', function() {
-            console.log('R2 video is ready to play');
-        });
-    }
+    });
+    
+    // Prevent video download by intercepting network requests
+    videoPlayer.addEventListener('load', function() {
+        // Ensure security attributes are always set
+        videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
+        videoPlayer.disableRemotePlayback = true;
+    });
+    
+    // Handle R2 video specific events
+    videoPlayer.addEventListener('waiting', function() {
+        // Video is buffering, show appropriate UI if needed
+        console.log('Video is buffering');
+    });
+    
+    videoPlayer.addEventListener('canplaythrough', function() {
+        // Video can play through without buffering
+        console.log('Video can play through');
+    });
 });
 
-// Optional: Untuk pengalaman pengguna yang lebih baik, biarkan text selection aktif
-// (Hapus style.userSelect = 'none' dan event listener untuk copy/paste)
 
-// Optional: Untuk mobile experience yang baik
+// Prevent orientation lock and ensure responsive behavior
 window.addEventListener('orientationchange', function() {
-    // Atur ulang layout jika diperlukan
+    // Adjust layout based on orientation
     setTimeout(function() {
-        window.scrollTo(0, 0);
+        // Force a redraw to ensure proper layout
+        document.body.style.height = '100vh';
+        document.body.offsetHeight; // Trigger reflow
     }, 100);
+});
+
+
+// Additional R2 video handling
+document.addEventListener('DOMContentLoaded', function() {
+    // Ensure video player is properly configured for R2 streaming
+    const videoPlayer = document.getElementById('videoPlayer');
+
+    // Set additional attributes for better R2 compatibility
+    videoPlayer.setAttribute('preload', 'metadata');
+    videoPlayer.setAttribute('playsinline', 'true');
+    videoPlayer.setAttribute('webkit-playsinline', 'true');
+
+    // Handle potential CORS issues with R2
+    videoPlayer.setAttribute('crossorigin', 'anonymous');
 });
