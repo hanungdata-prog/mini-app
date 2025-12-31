@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Drama Player</title>
+    <title>Drama Player - Debug Mode</title>
     <style>
         * {
             margin: 0;
@@ -22,6 +22,9 @@
             position: fixed;
             top: 0;
             left: 0;
+            /* DEBUG: Enable text selection */
+            user-select: text !important;
+            -webkit-user-select: text !important;
         }
 
         .container {
@@ -97,6 +100,27 @@
             user-select: none;
         }
 
+        /* Debug indicator */
+        .debug-badge {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            background: rgba(255, 0, 0, 0.8);
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+            z-index: 101;
+            pointer-events: none;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
         /* Loading indicator */
         .loading {
             position: absolute;
@@ -119,17 +143,14 @@
             text-align: center;
             z-index: 50;
             padding: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            max-width: 80%;
         }
 
-        /* Prevent selection and context menu */
+        /* DEBUG: Remove selection prevention */
         .no-select {
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
-            -webkit-user-drag: none;
-            -webkit-tap-highlight-color: transparent;
+            /* All user-select restrictions removed for debugging */
         }
         
         /* Orientation support */
@@ -162,9 +183,36 @@
                 font-size: 14px;
             }
         }
+
+        /* Debug console overlay (optional) */
+        .debug-console {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.95);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .debug-console.active {
+            display: block;
+        }
+
+        .debug-log {
+            margin: 2px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(0, 255, 0, 0.2);
+        }
     </style>
 </head>
-<body class="no-select">
+<body>
     <div class="container">
         <div class="header">
             <div class="title" id="videoTitle">Loading...</div>
@@ -187,6 +235,9 @@
                 
                 <div class="watermark">Telegram @drachin_harch_bot</div>
                 
+                <!-- Debug badge -->
+                <div class="debug-badge">🐛 DEBUG MODE</div>
+                
                 <div class="loading" id="loadingIndicator">Loading video...</div>
                 
                 <div class="error" id="errorMessage" style="display: none;"></div>
@@ -194,6 +245,50 @@
         </div>
     </div>
 
+    <!-- Optional debug console overlay -->
+    <div class="debug-console" id="debugConsole"></div>
+
+    <script>
+        // DEBUG: Enable console overlay (press Shift+D to toggle)
+        let debugConsoleActive = false;
+        const debugConsole = document.getElementById('debugConsole');
+        
+        function addDebugLog(message, type = 'info') {
+            const log = document.createElement('div');
+            log.className = 'debug-log';
+            const timestamp = new Date().toLocaleTimeString();
+            log.textContent = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
+            debugConsole.appendChild(log);
+            debugConsole.scrollTop = debugConsole.scrollHeight;
+        }
+
+        // Toggle debug console with Shift+D
+        document.addEventListener('keydown', (e) => {
+            if (e.shiftKey && e.key === 'D') {
+                debugConsoleActive = !debugConsoleActive;
+                debugConsole.classList.toggle('active', debugConsoleActive);
+                addDebugLog('Debug console toggled');
+            }
+        });
+
+        // Log all console messages to debug overlay
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addDebugLog(args.join(' '), 'log');
+        };
+
+        const originalError = console.error;
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addDebugLog(args.join(' '), 'error');
+        };
+
+        console.log('🐛 DEBUG MODE ACTIVE - DevTools enabled, all restrictions removed');
+        console.log('Press Shift+D to toggle debug console overlay');
+        console.log('Right-click is enabled, text selection is enabled');
+    </script>
+    
     <script src="app.js"></script>
 </body>
 </html>
