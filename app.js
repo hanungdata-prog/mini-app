@@ -4,17 +4,17 @@ function getUrlParameter(name) {
     return urlParams.get(name);
 }
 
-// Disable right-click context menu (optional for production)
-// document.addEventListener('contextmenu', function(e) {
-//     e.preventDefault();
-//     return false;
-// });
+//Disable right-click context menu (optional for production)
+document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    return false;
+});
 
-// Disable selection and text highlighting (optional for production)
-// document.addEventListener('selectstart', function(e) {
-//     e.preventDefault();
-//     return false;
-// });
+//Disable selection and text highlighting (optional for production)
+document.addEventListener('selectstart', function(e) {
+    e.preventDefault();
+    return false;
+});
 
 // Disable drag and drop
 document.addEventListener('dragstart', function(e) {
@@ -38,17 +38,17 @@ document.addEventListener('touchend', function(e) {
     lastTouchEnd = now;
 }, false);
 
-// Prevent video context menu (optional for production)
-// document.getElementById('videoPlayer').addEventListener('contextmenu', function(e) {
-//     e.preventDefault();
-//     return false;
-// });
+//Prevent video context menu (optional for production)
+document.getElementById('videoPlayer').addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    return false;
+});
 
-// Prevent video selection (optional for production)
-// document.getElementById('videoPlayer').addEventListener('selectstart', function(e) {
-//     e.preventDefault();
-//     return false;
-// });
+//Prevent video selection (optional for production)
+document.getElementById('videoPlayer').addEventListener('selectstart', function(e) {
+    e.preventDefault();
+    return false;
+});
 
 // Get the deep link code from URL
 const deepLinkCode = getUrlParameter('code');
@@ -124,21 +124,21 @@ if (!deepLinkCode) {
 // Additional security measures (reduced to allow devtools)
 document.addEventListener('DOMContentLoaded', function() {
     // Disable text selection on the entire page (reduced from full blocking)
-    // document.body.style.userSelect = 'none';
-    // document.body.style.webkitUserSelect = 'none';
-    // document.body.style.mozUserSelect = 'none';
-    // document.body.style.msUserSelect = 'none';
+    document.body.style.userSelect = 'none';
+    document.body.style.webkitUserSelect = 'none';
+    document.body.style.mozUserSelect = 'none';
+    document.body.style.msUserSelect = 'none';
 
     // Disable copy/paste events (optional, can be removed for dev)
-    // document.addEventListener('copy', function(e) {
-    //     e.preventDefault();
-    //     return false;
-    // });
+    document.addEventListener('copy', function(e) {
+        e.preventDefault();
+        return false;
+    });
 
-    // document.addEventListener('paste', function(e) {
-    //     e.preventDefault();
-    //     return false;
-    // });
+    document.addEventListener('paste', function(e) {
+        e.preventDefault();
+        return false;
+    });
 
     // Disable drag and drop on video element
     const videoPlayer = document.getElementById('videoPlayer');
