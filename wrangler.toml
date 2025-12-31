@@ -1,4 +1,4 @@
-name = "drama-video-api"
+name = "mini-app"
 main = "video-api-worker.js"
 compatibility_date = "2023-01-01"
 
