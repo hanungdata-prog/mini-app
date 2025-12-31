@@ -58,8 +58,9 @@ if (!deepLinkCode) {
     document.getElementById('errorMessage').textContent = 'No video code provided';
     document.getElementById('loadingIndicator').style.display = 'none';
 } else {
-    // Fetch video data from backend API
-    fetch(`/api/video?code=${encodeURIComponent(deepLinkCode)}`)
+    // Fetch video data from backend API (using your Cloudflare Worker)
+    const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
+    fetch(`${apiUrl}?code=${encodeURIComponent(deepLinkCode)}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error('Video not found');
