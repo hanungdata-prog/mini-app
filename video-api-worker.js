@@ -2,9 +2,10 @@
 // This worker acts as an API layer between the frontend and Supabase
 
 // Configuration
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
-const R2_BUCKET_NAME = 'YOUR_R2_BUCKET';
+const SUPABASE_URL = 'https://wpjfojsfkcgppprvzwoh.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwamZvanNma2NncHBwcnZ6d29oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTUwNDIsImV4cCI6MjA3MTMzMTA0Mn0.P877Kg2muBOMiqV7YxolL821gNKRo1vrgUPag_tdzwM
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwamZvanNma2NncHBwcnZ6d29oIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTc1NTA0MiwiZXhwIjoyMDcxMzMxMDQyfQ.rIJPgs_yIsjXZzeVyHbe6N2nk2MLDc5wJO1UumKVGwE';
+const R2_BUCKET_NAME = 'drama-videos';
 
 // Helper function to validate deep link code format
 function isValidDeepLinkCode(code) {
