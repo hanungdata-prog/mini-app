@@ -208,6 +208,14 @@ const supabaseQuery = async (path) => {
         headers.set("X-Frame-Options", "SAMEORIGIN");
         headers.set("X-XSS-Protection", "1; mode=block");
 
+        // Preserve all important metadata from R2 object
+        if (object.httpEtag) {
+          headers.set("ETag", object.httpEtag);
+        }
+        if (object.uploaded) {
+          headers.set("Last-Modified", new Date(object.uploaded).toUTCString());
+        }
+
         // Check if request is coming from Telegram and add specific headers if needed
         const userAgent = request.headers.get('User-Agent') || '';
         if (userAgent.toLowerCase().includes('telegram')) {
