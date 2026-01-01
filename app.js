@@ -676,20 +676,7 @@ handleVideoError() {
         let errorMessage = 'Failed to load video. Please try again.';
         
         if (error) {
-            switch (error.code) {
-                case error.MEDIA_ERR_ABORTED:
-                    errorMessage = 'Video playback was aborted.';
-                    break;
-                case error.MEDIA_ERR_NETWORK:
-                    errorMessage = 'Network error occurred while loading video.';
-                    break;
-                case error.MEDIA_ERR_DECODE:
-                    errorMessage = 'Video decoding error.';
-                    break;
-                case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
-                    errorMessage = 'Video format not supported.';
-                    break;
-            }
+            console.log(error)
         }
         
         this.showError(errorMessage);
