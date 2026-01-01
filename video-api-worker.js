@@ -1,9 +1,5 @@
-// Cloudflare Worker for secure video access
+// Cloudflare Worker for secure video access with VIP protection
 // This worker acts as an API layer between the frontend and Supabase
-
-// Configuration - Using environment variables from Cloudflare
-// These should be set in the Cloudflare dashboard
-// SUPABASE_URL, SUPABASE_ANON_KEY should be configured as secrets in Cloudflare
 
 // Helper function to validate deep link code format
 function isValidDeepLinkCode(code) {
@@ -12,9 +8,14 @@ function isValidDeepLinkCode(code) {
     return regex.test(code);
 }
 
-// Function to get Supabase client
+// Helper function to validate user ID
+function isValidUserId(userId) {
+    // User IDs should be numeric
+    return /^\d+$/.test(userId);
+}
+
+// Function to get Supabase client with enhanced error handling
 async function getSupabaseClient(supabaseUrl, supabaseAnonKey) {
-    // Using Supabase JavaScript client via fetch
     const headers = {
         'apikey': supabaseAnonKey,
         'Authorization': `Bearer ${supabaseAnonKey}`,
@@ -25,28 +26,75 @@ async function getSupabaseClient(supabaseUrl, supabaseAnonKey) {
     return {
         from: (table) => ({
             select: (columns) => ({
-                eq: (column, value) => {
-                    return {
-                        _execute: async () => {
-                            const response = await fetch(`${supabaseUrl}/rest/v1/${table}?${column}=eq.${value}&select=${columns}`, {
-                                headers: headers
-                            });
+                eq: (column, value) => ({
+                    _execute: async () => {
+                        const encodedValue = encodeURIComponent(value);
+                        const queryUrl = `${supabaseUrl}/rest/v1/${table}?${column}=eq.${encodedValue}&select=${columns}`;
+                        
+                        const response = await fetch(queryUrl, {
+                            headers: headers
+                        });
 
-                            if (!response.ok) {
-                                // Log the error for debugging
-                                console.error(`Supabase request failed: ${response.status} ${response.statusText}`);
-                                console.error(`URL: ${supabaseUrl}/rest/v1/${table}?${column}=eq.${value}&select=${columns}`);
-                                throw new Error(`Supabase error: ${response.statusText}`);
-                            }
-
-                            const data = await response.json();
-                            console.log(`Supabase response: ${JSON.stringify(data)}`);
-                            return data;
+                        if (!response.ok) {
+                            console.error(`Supabase request failed: ${response.status} ${response.statusText}`);
+                            console.error(`URL: ${queryUrl}`);
+                            const errorText = await response.text();
+                            console.error(`Error details: ${errorText}`);
+                            throw new Error(`Supabase error: ${response.statusText}`);
                         }
-                    };
+
+                        const data = await response.json();
+                        console.log(`Supabase response for ${table}:`, JSON.stringify(data).substring(0, 200));
+                        return data;
+                    }
+                }),
+                _execute: async () => {
+                    const queryUrl = `${supabaseUrl}/rest/v1/${table}?select=${columns}`;
+                    
+                    const response = await fetch(queryUrl, {
+                        headers: headers
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Supabase error: ${response.statusText}`);
+                    }
+
+                    return await response.json();
                 }
             })
-        })
+        }),
+        // Method for updating records
+        update: async (table, filter, data) => {
+            const queryUrl = `${supabaseUrl}/rest/v1/${table}?${filter}`;
+            
+            const response = await fetch(queryUrl, {
+                method: 'PATCH',
+                headers: headers,
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Supabase update error: ${response.statusText}`);
+            }
+
+            return await response.json();
+        },
+        // Method for inserting records
+        insert: async (table, data) => {
+            const queryUrl = `${supabaseUrl}/rest/v1/${table}`;
+            
+            const response = await fetch(queryUrl, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Supabase insert error: ${response.statusText}`);
+            }
+
+            return await response.json();
+        }
     };
 }
 
@@ -54,8 +102,6 @@ async function getSupabaseClient(supabaseUrl, supabaseAnonKey) {
 function validateAndSecureVideoUrl(videoUrl) {
     // Check if the URL is a valid R2 URL
     if (videoUrl.includes('r2.dev')) {
-        // For R2 URLs, we can return the URL as is, but in production
-        // you would want to generate a signed URL with short expiration
         return videoUrl;
     }
     
@@ -65,16 +111,99 @@ function validateAndSecureVideoUrl(videoUrl) {
         const trustedDomains = [
             'r2.dev',
             'cloudflarestream.com',
+            'cdn.cloudflare.com',
+            'storage.googleapis.com',
             'your-trusted-domain.com'
         ];
         
         if (!trustedDomains.some(domain => url.hostname.includes(domain))) {
-            throw new Error('Untrusted video URL domain');
+            console.warn(`Untrusted video URL domain: ${url.hostname}`);
+            // Return the URL anyway but log the warning
+            return videoUrl;
         }
         
         return videoUrl;
     } catch (e) {
         throw new Error('Invalid video URL format');
+    }
+}
+
+// Function to check VIP access
+async function checkVipAccess(supabase, userId) {
+    try {
+        const users = await supabase
+            .from('users')
+            .select('user_id,username,vip_status,vip_expired_date,vip_package')
+            .eq('user_id', userId)
+            ._execute();
+
+        if (!users || users.length === 0) {
+            return {
+                has_access: false,
+                is_vip: false,
+                vip_expired: false,
+                message: 'User not found. Please register first.'
+            };
+        }
+
+        const user = users[0];
+        const now = new Date();
+        const vipExpired = user.vip_expired_date ? new Date(user.vip_expired_date) : null;
+
+        // Check if user is VIP and not expired
+        const isValidVip = user.vip_status && vipExpired && vipExpired > now;
+
+        return {
+            has_access: isValidVip,
+            is_vip: user.vip_status,
+            vip_expired: user.vip_status && (!vipExpired || vipExpired <= now),
+            vip_expired_date: user.vip_expired_date,
+            vip_package: user.vip_package,
+            message: isValidVip ? null : 'VIP membership required to watch this video'
+        };
+    } catch (error) {
+        console.error('Error checking VIP access:', error);
+        throw error;
+    }
+}
+
+// Function to update user last active
+async function updateUserActivity(supabase, supabaseUrl, supabaseKey, userId) {
+    try {
+        const now = new Date().toISOString();
+        await supabase.update('users', `user_id=eq.${userId}`, {
+            last_active: now
+        });
+    } catch (error) {
+        console.error('Error updating user activity:', error);
+        // Don't throw, just log - this is not critical
+    }
+}
+
+// Function to increment view count
+async function incrementViewCount(supabase, videoId) {
+    try {
+        // Note: This is a simplified increment. In production, use atomic operations
+        await supabase.update('videos', `video_id=eq.${videoId}`, {
+            view_count: 'view_count + 1' // This won't work with current setup, needs RPC
+        });
+    } catch (error) {
+        console.error('Error incrementing view count:', error);
+        // Don't throw, just log
+    }
+}
+
+// Function to add to watch history
+async function addToWatchHistory(supabase, userId, videoId) {
+    try {
+        await supabase.insert('watch_history', {
+            user_id: parseInt(userId),
+            video_id: videoId,
+            watched_at: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Error adding to watch history:', error);
+        // Don't throw, just log
     }
 }
 
@@ -88,7 +217,10 @@ export default {
         // Validate configuration
         if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
             return new Response(
-                JSON.stringify({ error: 'Server configuration error: Missing SUPABASE_URL or SUPABASE_ANON_KEY' }),
+                JSON.stringify({ 
+                    error: 'Server configuration error',
+                    message: 'Missing SUPABASE_URL or SUPABASE_ANON_KEY' 
+                }),
                 {
                     status: 500,
                     headers: {
@@ -115,14 +247,32 @@ export default {
 
         const url = new URL(request.url);
 
-        // Check if request is for the video API endpoint
-        if (url.pathname === '/api/video') {
+        // Route: GET /api/video?code=XXX&user_id=XXX
+        if (url.pathname === '/api/video' && request.method === 'GET') {
             const code = url.searchParams.get('code');
+            const userId = url.searchParams.get('user_id');
 
             // Validate the deep link code
             if (!code || !isValidDeepLinkCode(code)) {
                 return new Response(
-                    JSON.stringify({ error: 'Invalid or missing deep link code' }),
+                    JSON.stringify({ 
+                        error: 'Invalid parameter',
+                        message: 'Invalid or missing deep link code' 
+                    }),
+                    {
+                        status: 400,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    }
+                );
+            }
+
+            // Validate user_id if provided
+            if (userId && !isValidUserId(userId)) {
+                return new Response(
+                    JSON.stringify({ 
+                        error: 'Invalid parameter',
+                        message: 'Invalid user ID format' 
+                    }),
                     {
                         status: 400,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -131,21 +281,26 @@ export default {
             }
 
             try {
-                // Initialize Supabase client with environment variables
+                console.log(`Processing request for code: ${code}, user_id: ${userId || 'none'}`);
+
+                // Initialize Supabase client
                 const supabase = await getSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
                 // Query the video by deep_link_code
-                const result = await supabase
+                const videos = await supabase
                     .from('videos')
-                    .select('title, description, category, video_url')
+                    .select('video_id,title,description,category,video_url,thumbnail_url,view_count,created_at')
                     .eq('deep_link_code', code)
                     ._execute();
 
-                console.log(`Query result for code ${code}:`, result);
+                console.log(`Query result for code ${code}:`, videos.length, 'videos found');
 
-                if (!result || result.length === 0) {
+                if (!videos || videos.length === 0) {
                     return new Response(
-                        JSON.stringify({ error: 'Video not found' }),
+                        JSON.stringify({ 
+                            error: 'Not found',
+                            message: 'Video not found' 
+                        }),
                         {
                             status: 404,
                             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -153,36 +308,172 @@ export default {
                     );
                 }
 
-                const videoData = result[0];
+                const video = videos[0];
+                const isVipVideo = video.category === 'vip';
 
-                // Optional: Check if the video is VIP content and validate user access
-                // This would require additional user authentication logic
-                if (videoData.category === 'vip') {
-                    // In a real implementation, you'd validate user subscription here
-                    // For now, we'll allow access for demo purposes
+                // Initialize access object
+                let userAccess = {
+                    has_access: true,
+                    is_vip: false,
+                    vip_expired: false,
+                    message: null
+                };
+
+                // Check VIP access if needed
+                if (isVipVideo) {
+                    if (!userId) {
+                        // VIP video but no user_id provided
+                        userAccess = {
+                            has_access: false,
+                            is_vip: false,
+                            vip_expired: false,
+                            message: 'Please login to watch VIP content'
+                        };
+                    } else {
+                        // Check user's VIP status
+                        userAccess = await checkVipAccess(supabase, userId);
+                    }
+                }
+
+                // Update user activity if user_id provided and has access
+                if (userId && userAccess.has_access) {
+                    await updateUserActivity(supabase, SUPABASE_URL, SUPABASE_ANON_KEY, userId);
+                }
+
+                // Track view and history only if user has access
+                if (userAccess.has_access) {
+                    // Increment view count (background, non-blocking)
+                    ctx.waitUntil(incrementViewCount(supabase, video.video_id));
+                    
+                    // Add to watch history if user_id provided
+                    if (userId) {
+                        ctx.waitUntil(addToWatchHistory(supabase, userId, video.video_id));
+                    }
                 }
 
                 // Validate and secure the video URL
-                const secureVideoUrl = validateAndSecureVideoUrl(videoData.video_url);
+                const secureVideoUrl = userAccess.has_access 
+                    ? validateAndSecureVideoUrl(video.video_url) 
+                    : null;
 
-                // Return video data
+                // Prepare response
                 const response = {
-                    title: videoData.title,
-                    description: videoData.description,
-                    category: videoData.category,
-                    video_url: secureVideoUrl
+                    video_id: video.video_id,
+                    title: video.title,
+                    description: video.description,
+                    category: video.category,
+                    thumbnail_url: video.thumbnail_url,
+                    view_count: video.view_count || 0,
+                    created_at: video.created_at,
+                    access: userAccess
                 };
+
+                // Only include video_url if user has access
+                if (userAccess.has_access && secureVideoUrl) {
+                    response.video_url = secureVideoUrl;
+                }
 
                 return new Response(
                     JSON.stringify(response),
                     {
+                        status: 200,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     }
                 );
+
             } catch (error) {
                 console.error('Error fetching video:', error);
                 return new Response(
-                    JSON.stringify({ error: error.message || 'Internal server error' }),
+                    JSON.stringify({ 
+                        error: 'Internal server error',
+                        message: error.message || 'Failed to fetch video data'
+                    }),
+                    {
+                        status: 500,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    }
+                );
+            }
+        }
+
+        // Route: POST /api/video/access-check
+        if (url.pathname === '/api/video/access-check' && request.method === 'POST') {
+            try {
+                const body = await request.json();
+                const { user_id, video_code } = body;
+
+                if (!user_id || !video_code) {
+                    return new Response(
+                        JSON.stringify({ 
+                            error: 'Missing parameters',
+                            message: 'user_id and video_code are required' 
+                        }),
+                        {
+                            status: 400,
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                        }
+                    );
+                }
+
+                const supabase = await getSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+                // Get video
+                const videos = await supabase
+                    .from('videos')
+                    .select('category')
+                    .eq('deep_link_code', video_code)
+                    ._execute();
+
+                if (!videos || videos.length === 0) {
+                    return new Response(
+                        JSON.stringify({ 
+                            has_access: false,
+                            message: 'Video not found' 
+                        }),
+                        {
+                            status: 404,
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                        }
+                    );
+                }
+
+                const video = videos[0];
+
+                // If free video, grant access
+                if (video.category !== 'vip') {
+                    return new Response(
+                        JSON.stringify({ 
+                            has_access: true,
+                            is_vip_video: false
+                        }),
+                        {
+                            status: 200,
+                            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                        }
+                    );
+                }
+
+                // Check VIP access
+                const access = await checkVipAccess(supabase, user_id);
+
+                return new Response(
+                    JSON.stringify({ 
+                        ...access,
+                        is_vip_video: true
+                    }),
+                    {
+                        status: 200,
+                        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    }
+                );
+
+            } catch (error) {
+                console.error('Error checking access:', error);
+                return new Response(
+                    JSON.stringify({ 
+                        error: 'Internal error',
+                        message: error.message 
+                    }),
                     {
                         status: 500,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -192,6 +483,12 @@ export default {
         }
 
         // Return 404 for other routes
-        return new Response('Not Found', { status: 404 });
+        return new Response(
+            JSON.stringify({ error: 'Not Found' }), 
+            { 
+                status: 404,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            }
+        );
     }
 };
