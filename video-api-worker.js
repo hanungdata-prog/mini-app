@@ -4,7 +4,8 @@ export default {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Range, Accept, X-Requested-With, Authorization",
-      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length, Content-Type"
+      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length, Content-Type",
+      "Access-Control-Allow-Credentials": "true"
     };
 
     if (request.method === "OPTIONS") {
@@ -286,11 +287,13 @@ export default {
         
         // Essential headers for video streaming
         headers.set("Accept-Ranges", "bytes");
-        headers.set("Cache-Control", "public, max-age=3600");
+        headers.set("Cache-Control", "public, max-age=31536000");
         headers.set("Content-Disposition", "inline");
         
-        // Security headers
+        // Telegram-specific headers
         headers.set("X-Content-Type-Options", "nosniff");
+        headers.set("Cross-Origin-Resource-Policy", "cross-origin");
+        headers.set("Cross-Origin-Embedder-Policy", "unsafe-none");
         
         // Set ETag and Last-Modified
         if (object.httpEtag) {
