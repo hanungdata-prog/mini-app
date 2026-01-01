@@ -6,3 +6,10 @@ account_id = "4298fcc787e5229647ed981ba9de380b"
 [vars]
 SUPABASE_URL = "https://wpjfojsfkcgppprvzwoh.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwamZvanNma2NncHBwcnZ6d29oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTUwNDIsImV4cCI6MjA3MTMzMTA0Mn0.P877Kg2muBOMiqV7YxolL821gNKRo1vrgUPag_tdzwM"
+SECURE_KEY = "harch_secure_video_2024_protected_stream"  # For URL encryption
+
+[build]
+command = "echo 'Building secure video API...'"
+
+[site]
+bucket = "./public"
