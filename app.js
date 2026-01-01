@@ -440,32 +440,86 @@ class VideoPlayerApp {
         document.title = title + ' - Harch Short';
     }
     
-    setVideoSource(videoUrl) {
-      if (!this.videoPlayer) return;
+// Bagian setVideoSource yang diperbaiki
+setVideoSource(videoUrl) {
+  if (!this.videoPlayer) return;
 
-      // ✅ FIX: support relative URL
-      let finalUrl;
-      try {
-        finalUrl = videoUrl.startsWith('http')
-          ? videoUrl
-          : new URL(videoUrl, window.location.origin).href;
-      } catch (e) {
-        console.error('Invalid video URL:', videoUrl);
-        this.showError('Invalid video stream URL.');
-        return;
-      }
+  // ✅ FIX: Pastikan URL absolut
+  let finalUrl = videoUrl;
+  
+  // Jika URL relative, buat jadi absolute
+  if (!videoUrl.startsWith('http')) {
+    try {
+      finalUrl = new URL(videoUrl, window.location.origin).href;
+    } catch (e) {
+      console.error('Invalid video URL:', videoUrl);
+      this.showError('Invalid video stream URL.');
+      return;
+    }
+  }
 
-      this.videoPlayer.src = finalUrl;
+  console.log('Setting video source:', finalUrl);
 
-      this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
-      this.videoPlayer.disableRemotePlayback = true;
-      this.videoPlayer.setAttribute('preload', 'metadata');
-      this.videoPlayer.setAttribute('playsinline', 'true');
-      this.videoPlayer.setAttribute('webkit-playsinline', 'true');
+  // ✅ FIX: Set attributes SEBELUM set src
+  this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
+  this.videoPlayer.setAttribute('preload', 'auto'); // Changed from 'metadata' to 'auto'
+  this.videoPlayer.setAttribute('playsinline', 'true');
+  this.videoPlayer.setAttribute('webkit-playsinline', 'true');
+  this.videoPlayer.disableRemotePlayback = true;
+  this.videoPlayer.controls = false;
 
-      this.videoPlayer.controls = false;
-      this.videoPlayer.load();
-    }  
+  // ✅ FIX: Bersihkan source lama
+  this.videoPlayer.src = '';
+  this.videoPlayer.load();
+
+  // ✅ FIX: Set source baru
+  setTimeout(() => {
+    this.videoPlayer.src = finalUrl;
+    this.videoPlayer.load();
+    
+    // Auto-play setelah loaded (optional)
+    this.videoPlayer.addEventListener('canplay', () => {
+      this.videoPlayer.play().catch(err => {
+        console.log('Autoplay prevented:', err);
+      });
+    }, { once: true });
+  }, 100);
+}
+
+// ✅ Tambahkan fungsi ini jika belum ada
+handleVideoError() {
+  this.loadingIndicator.style.display = 'none';
+  const error = this.videoPlayer.error;
+  let errorMessage = 'Failed to load video. Please try again.';
+  
+  if (error) {
+    console.error('Video error code:', error.code);
+    console.error('Video error message:', error.message);
+    
+    switch (error.code) {
+      case error.MEDIA_ERR_ABORTED:
+        errorMessage = 'Video playback was aborted.';
+        break;
+      case error.MEDIA_ERR_NETWORK:
+        errorMessage = 'Network error occurred. Check your connection.';
+        break;
+      case error.MEDIA_ERR_DECODE:
+        errorMessage = 'Video decoding error. File may be corrupted.';
+        break;
+      case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+        errorMessage = 'Video format not supported or file not accessible.';
+        // ✅ FIX: Coba reload dengan delay
+        setTimeout(() => {
+          if (this.retryCount < this.maxRetries) {
+            this.retryLoading();
+          }
+        }, 2000);
+        break;
+    }
+  }
+  
+  this.showError(errorMessage);
+}
     // ========== EVENT LISTENERS (abbreviated for space) ==========
     
     setupEventListeners() {
