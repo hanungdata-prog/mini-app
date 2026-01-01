@@ -348,6 +348,10 @@ const supabaseQuery = async (path) => {
         headers.set("Content-Disposition", "inline");
         headers.set("X-Permitted-Cross-Domain-Policies", "none");
 
+        // Essential headers for video compatibility
+        headers.set("Accept-Ranges", "bytes");
+        headers.set("Content-Transfer-Encoding", "binary");
+
         // Check if request is coming from Telegram and add specific headers if needed
         const userAgent = request.headers.get('User-Agent') || '';
         if (userAgent.toLowerCase().includes('telegram')) {
@@ -357,6 +361,7 @@ const supabaseQuery = async (path) => {
           // Some Telegram clients might need specific headers
           headers.set("Access-Control-Allow-Origin", "*");
           headers.set("Timing-Allow-Origin", "*");
+          headers.set("X-Frame-Options", "SAMEORIGIN");
         }
 
         if (range && object.range) {
