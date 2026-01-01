@@ -440,52 +440,53 @@ class VideoPlayerApp {
         document.title = title + ' - Harch Short';
     }
     
-// Bagian setVideoSource yang diperbaiki
-setVideoSource(videoUrl) {
-  if (!this.videoPlayer) return;
-
-  // ✅ FIX: Pastikan URL absolut
-  let finalUrl = videoUrl;
-  
-  // Jika URL relative, buat jadi absolute
-  if (!videoUrl.startsWith('http')) {
-    try {
-      finalUrl = new URL(videoUrl, window.location.origin).href;
-    } catch (e) {
-      console.error('Invalid video URL:', videoUrl);
-      this.showError('Invalid video stream URL.');
-      return;
-    }
-  }
-
-  console.log('Setting video source:', finalUrl);
-
-  // ✅ FIX: Set attributes SEBELUM set src
-  this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
-  this.videoPlayer.setAttribute('preload', 'auto'); // Changed from 'metadata' to 'auto'
-  this.videoPlayer.setAttribute('playsinline', 'true');
-  this.videoPlayer.setAttribute('webkit-playsinline', 'true');
-  this.videoPlayer.disableRemotePlayback = true;
-  this.videoPlayer.controls = false;
-
-  // ✅ FIX: Bersihkan source lama
-  this.videoPlayer.src = '';
-  this.videoPlayer.load();
-
-  // ✅ FIX: Set source baru
-  setTimeout(() => {
-    this.videoPlayer.src = finalUrl;
-    this.videoPlayer.load();
+    // Bagian setVideoSource yang diperbaiki
+    setVideoSource(videoUrl) {
+      if (!this.videoPlayer) return;
     
-    // Auto-play setelah loaded (optional)
-    this.videoPlayer.addEventListener('canplay', () => {
-      this.videoPlayer.play().catch(err => {
-        console.log('Autoplay prevented:', err);
-      });
-    }, { once: true });
-  }, 100);
-}
-    // ========== EVENT LISTENERS (abbreviated for space) ==========
+      // ✅ FIX: Pastikan URL absolut
+      let finalUrl = videoUrl;
+      
+      // Jika URL relative, buat jadi absolute
+      if (!videoUrl.startsWith('http')) {
+        try {
+          finalUrl = new URL(videoUrl, window.location.origin).href;
+        } catch (e) {
+          console.error('Invalid video URL:', videoUrl);
+          this.showError('Invalid video stream URL.');
+          return;
+        }
+      }
+    
+      console.log('Setting video source:', finalUrl);
+    
+      // ✅ FIX: Set attributes SEBELUM set src
+      this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
+      this.videoPlayer.setAttribute('preload', 'auto'); // Changed from 'metadata' to 'auto'
+      this.videoPlayer.setAttribute('playsinline', 'true');
+      this.videoPlayer.setAttribute('webkit-playsinline', 'true');
+      this.videoPlayer.disableRemotePlayback = true;
+      this.videoPlayer.controls = false;
+    
+      // ✅ FIX: Bersihkan source lama
+      this.videoPlayer.src = '';
+      this.videoPlayer.load();
+    
+      // ✅ FIX: Set source baru
+      setTimeout(() => {
+        this.videoPlayer.src = finalUrl;
+        this.videoPlayer.load();
+        
+        // Auto-play setelah loaded (optional)
+        this.videoPlayer.addEventListener('canplay', () => {
+          this.videoPlayer.play().catch(err => {
+            console.log('Autoplay prevented:', err);
+          });
+        }, { once: true });
+      }, 100);
+    }
+    
+    // ========== EVENT LISTENERS ==========
     
     setupEventListeners() {
         if (!this.videoPlayer) return;
@@ -665,7 +666,7 @@ setVideoSource(videoUrl) {
         let errorMessage = 'Failed to load video. Please try again.';
         
         if (error) {
-            console.log(error)
+            console.log(error);
         }
         
         this.showError(errorMessage);
@@ -974,10 +975,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     }
     
-    // // Additional security: Prevent iframe embedding
-    // if (window.self !== window.top) {
-    //     window.top.location = window.self.location;
-    // }
+    // Additional security: Prevent iframe embedding
+    if (window.self !== window.top) {
+        window.top.location = window.self.location;
+    }
     
     // Watermark protection
     const observer = new MutationObserver((mutations) => {
