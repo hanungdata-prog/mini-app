@@ -303,17 +303,17 @@ export default {
           headers.set("Last-Modified", new Date(object.uploaded).toUTCString());
         }
 
-        // Handle range requests
-        if (range && object.range) {
-          const { offset, end } = object.range;
-          headers.set("Content-Range", `bytes ${offset}-${end}/${object.size}`);
-          headers.set("Content-Length", String(end - offset + 1));
-          return new Response(object.body, { status: 206, headers });
-        }
+if (range) {
+  if (!object.range) {
+    return new Response("Range Not Satisfiable", { status: 416, headers });
+  }
 
-        // Full response
-        headers.set("Content-Length", String(object.size));
-        return new Response(object.body, { status: 200, headers });
+  const { offset, end } = object.range;
+  headers.set("Content-Range", `bytes ${offset}-${end}/${object.size}`);
+  headers.set("Content-Length", String(end - offset + 1));
+  return new Response(object.body, { status: 206, headers });
+}
+
 
       } catch (e) {
         console.error("Stream error:", e);
