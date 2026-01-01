@@ -559,22 +559,28 @@
     <script src="app.js"></script>
     
     <!-- Debug toggle (double tap title to show/hide) -->
-    <script>
-        let tapCount = 0;
-        let tapTimer = null;
-        document.getElementById('videoTitle').addEventListener('click', function() {
-            tapCount++;
-            if (tapCount === 1) {
-                tapTimer = setTimeout(function() {
-                    tapCount = 0;
-                }, 300);
-            } else if (tapCount === 2) {
-                clearTimeout(tapTimer);
-                tapCount = 0;
-                const debugInfo = document.getElementById('debugInfo');
-                debugInfo.style.display = debugInfo.style.display === 'none' ? 'block' : 'none';
-            }
-        });
-    </script>
+<script>
+const debugToggleEl = document.getElementById('overlayTitle');
+if (debugToggleEl) {
+  let tapCount = 0;
+  let tapTimer = null;
+
+  debugToggleEl.addEventListener('click', function () {
+    tapCount++;
+    if (tapCount === 1) {
+      tapTimer = setTimeout(() => tapCount = 0, 300);
+    } else if (tapCount === 2) {
+      clearTimeout(tapTimer);
+      tapCount = 0;
+      const debugInfo = document.getElementById('debugInfo');
+      if (debugInfo) {
+        debugInfo.style.display =
+          debugInfo.style.display === 'none' ? 'block' : 'none';
+      }
+    }
+  });
+}
+</script>
+
 </body>
 </html>
