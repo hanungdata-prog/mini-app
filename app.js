@@ -440,51 +440,84 @@ class VideoPlayerApp {
         document.title = title + ' - Harch Short';
     }
     
-    // Bagian setVideoSource yang diperbaiki
-    setVideoSource(videoUrl) {
-      if (!this.videoPlayer) return;
-    
-      // ✅ FIX: Pastikan URL absolut
-      let finalUrl = videoUrl;
-      
-      // Jika URL relative, buat jadi absolute
-      if (!videoUrl.startsWith('http')) {
-        try {
-          finalUrl = new URL(videoUrl, window.location.origin).href;
-        } catch (e) {
-          console.error('Invalid video URL:', videoUrl);
-          this.showError('Invalid video stream URL.');
-          return;
-        }
-      }
-    
-      console.log('Setting video source:', finalUrl);
-    
-      // ✅ FIX: Set attributes SEBELUM set src
-      this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
-      this.videoPlayer.setAttribute('preload', 'auto'); // Changed from 'metadata' to 'auto'
-      this.videoPlayer.setAttribute('playsinline', 'true');
-      this.videoPlayer.setAttribute('webkit-playsinline', 'true');
-      this.videoPlayer.disableRemotePlayback = true;
-      this.videoPlayer.controls = false;
-    
-      // ✅ FIX: Bersihkan source lama
-      this.videoPlayer.src = '';
-      this.videoPlayer.load();
-    
-      // ✅ FIX: Set source baru
-      setTimeout(() => {
-        this.videoPlayer.src = finalUrl;
-        this.videoPlayer.load();
-        
-        // Auto-play setelah loaded (optional)
-        this.videoPlayer.addEventListener('canplay', () => {
-          this.videoPlayer.play().catch(err => {
-            console.log('Autoplay prevented:', err);
-          });
-        }, { once: true });
-      }, 100);
+// ✅ FIXED: Replace your setVideoSource function with this
+setVideoSource(videoUrl) {
+  if (!this.videoPlayer) return;
+
+  // ✅ Pastikan URL valid
+  let finalUrl = videoUrl;
+  
+  // Jika URL relative, buat jadi absolute
+  if (!videoUrl.startsWith('http')) {
+    try {
+      finalUrl = new URL(videoUrl, window.location.origin).href;
+    } catch (e) {
+      console.error('Invalid video URL:', videoUrl);
+      this.showError('Invalid video stream URL.');
+      return;
     }
+  }
+
+  console.log('Setting video source:', finalUrl);
+
+  // ✅ Set attributes DULU sebelum set src
+  this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
+  this.videoPlayer.setAttribute('preload', 'auto');
+  this.videoPlayer.setAttribute('playsinline', 'true');
+  this.videoPlayer.setAttribute('webkit-playsinline', 'true');
+  this.videoPlayer.disableRemotePlayback = true;
+  this.videoPlayer.controls = false;
+
+  // ✅ PENTING: Set src langsung TANPA setTimeout
+  this.videoPlayer.src = finalUrl;
+  
+  // ✅ Trigger load
+  this.videoPlayer.load();
+
+  // ✅ Optional: Auto-play saat ready
+  this.videoPlayer.addEventListener('loadedmetadata', () => {
+    console.log('Video metadata loaded');
+    this.videoPlayer.play().catch(err => {
+      console.log('Autoplay prevented (user interaction required):', err);
+    });
+  }, { once: true });
+}
+
+handleVideoError() {
+  this.loadingIndicator.style.display = 'none';
+  const error = this.videoPlayer.error;
+  let errorMessage = 'Failed to load video. Please try again.';
+  
+  if (error) {
+    console.error('❌ Video Error Details:');
+    console.error('- Code:', error.code);
+    console.error('- Message:', error.message);
+    console.error('- Video src:', this.videoPlayer.src);
+    
+    switch (error.code) {
+      case 1: // MEDIA_ERR_ABORTED
+        errorMessage = 'Video loading was aborted.';
+        break;
+      case 2: // MEDIA_ERR_NETWORK
+        errorMessage = 'Network error. Please check your connection.';
+        break;
+      case 3: // MEDIA_ERR_DECODE
+        errorMessage = 'Video decoding failed. File may be corrupted.';
+        break;
+      case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+        errorMessage = 'Video format not supported or source not accessible.';
+        console.error('- This usually means the URL is invalid or token expired');
+        break;
+    }
+  } else {
+    console.error('❌ Video error without error object');
+    console.error('- Video src:', this.videoPlayer.src);
+    console.error('- Video readyState:', this.videoPlayer.readyState);
+    console.error('- Video networkState:', this.videoPlayer.networkState);
+  }
+  
+  this.showError(errorMessage);
+}
     
     // ========== EVENT LISTENERS ==========
     
