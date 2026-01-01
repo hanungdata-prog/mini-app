@@ -1,9 +1,9 @@
 export default {
   async fetch(request, env) {
     const cors = {
-      "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+      "Access-Control-Allow-Origin": "*", // Allow all origins for Telegram
       "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Range, Accept, X-Requested-With",
+      "Access-Control-Allow-Headers": "Content-Type, Range, Accept, X-Requested-With, Authorization",
       "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length, Content-Type"
     };
 
@@ -22,32 +22,31 @@ export default {
         headers: { ...cors, "Content-Type": "application/json" }
       });
 
-const supabaseQuery = async (path) => {
-  const url = `${env.SUPABASE_URL}/rest/v1/${path}`;
+    const supabaseQuery = async (path) => {
+      const url = `${env.SUPABASE_URL}/rest/v1/${path}`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      apikey: env.SUPABASE_SERVICE_KEY,
-      Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Prefer: "return=representation"
-    }
-  });
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          apikey: env.SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Prefer: "return=representation"
+        }
+      });
 
-  const text = await res.text();
+      const text = await res.text();
 
-  if (!res.ok) {
-    console.error("Supabase URL:", url);
-    console.error("Supabase status:", res.status);
-    console.error("Supabase response:", text);
-    throw new Error("Supabase error");
-  }
+      if (!res.ok) {
+        console.error("Supabase URL:", url);
+        console.error("Supabase status:", res.status);
+        console.error("Supabase response:", text);
+        throw new Error("Supabase error");
+      }
 
-  return JSON.parse(text);
-};
-
+      return JSON.parse(text);
+    };
 
     // =========================
     // TOKEN UTILS
@@ -95,6 +94,30 @@ const supabaseQuery = async (path) => {
     };
 
     // =========================
+    // LIST R2 OBJECTS (DEBUG)
+    // =========================
+    if (url.pathname === "/api/r2/list") {
+      try {
+        const prefix = url.searchParams.get("prefix") || "";
+        const list = await env.R2_BUCKET.list({ prefix, limit: 100 });
+        
+        return json({
+          prefix,
+          count: list.objects.length,
+          truncated: list.truncated,
+          objects: list.objects.map(obj => ({
+            key: obj.key,
+            size: obj.size,
+            uploaded: obj.uploaded
+          }))
+        });
+      } catch (e) {
+        console.error("R2 list error:", e);
+        return json({ error: "Failed to list R2 objects", message: e.message }, 500);
+      }
+    }
+
+    // =========================
     // API: VIDEO METADATA
     // =========================
     if (url.pathname === "/api/video") {
@@ -108,7 +131,7 @@ const supabaseQuery = async (path) => {
         console.log("User ID:", userId);
 
         const videos = await supabaseQuery(
-          `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=category,title,description,deep_link_code`
+          `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=*`
         );
 
         console.log("Videos query result:", videos);
@@ -118,6 +141,7 @@ const supabaseQuery = async (path) => {
         const video = videos[0];
         console.log("Selected video:", JSON.stringify(video));
 
+        // Check VIP access
         if (video.category === "vip") {
           if (!userId) return json({ error: "VIP required" }, 403);
 
@@ -136,37 +160,35 @@ const supabaseQuery = async (path) => {
           }
         }
 
-        // 🔐 token 30 detik
-        // Construct the R2 path directly based on the video information
-        // This assumes a consistent naming convention in R2
-        // Format: drama-folder-name/Bagian_XXX_marked.mp4
-        const folderName = video.title.replace(/\s+/g, '_').replace(/[^\w\-\.]/g, '_');
-
-        // Determine the part number from the deep link code or other metadata
-        // For now, we'll use a simple approach - in practice you might need to store this in DB
-        // or have a more sophisticated way to determine the part
-        const partNumber = "001"; // This would need to be determined based on your specific logic
-
-        const pathForToken = `${folderName}/Bagian_${partNumber}_marked.mp4`;
+        // Use r2_path from database if available
+        let pathForToken = video.r2_path;
+        
+        // If no r2_path, construct from title
+        if (!pathForToken) {
+          const folderName = video.title.replace(/\s+/g, '_').replace(/[^\w\-\.]/g, '_');
+          const partNumber = "001"; // Default part
+          pathForToken = `${folderName}/Bagian_${partNumber}_marked.mp4`;
+        }
 
         console.log("Video record from Supabase:", JSON.stringify(video));
-        console.log("Constructed R2 path for token:", pathForToken);
+        console.log("R2 path for token:", pathForToken);
 
-        // Ensure pathForToken is valid before creating token
+        // Validate path
         if (!pathForToken || typeof pathForToken !== 'string' || pathForToken.trim() === '') {
           console.error("Invalid path for token:", pathForToken);
           return json({ error: "Invalid video path configuration" }, 500);
         }
 
+        // Sign token with longer expiry for Telegram (5 minutes)
         const token = await signToken({
           path: pathForToken,
-          exp: Date.now() + 30_000
+          exp: Date.now() + 300_000 // 5 minutes for Telegram
         });
 
         return json({
           title: video.title,
           description: video.description,
-          stream_url: `https://mini-app.dramachinaharch.workers.dev/api/video/stream?token=${encodeURIComponent(token)}`
+          stream_url: `/api/video/stream?token=${encodeURIComponent(token)}`
         });
 
       } catch (e) {
@@ -176,7 +198,7 @@ const supabaseQuery = async (path) => {
     }
 
     // =========================
-    // API: VIDEO STREAM (NO DB)
+    // API: VIDEO STREAM
     // =========================
     if (url.pathname === "/api/video/stream") {
       try {
@@ -200,127 +222,82 @@ const supabaseQuery = async (path) => {
         }
 
         const range = request.headers.get("Range");
-        // Log the path being accessed for debugging
         console.log("Attempting to access R2 object at path:", payload.path);
-        console.log("Request headers:", JSON.stringify([...request.headers]));
+        console.log("Range header:", range);
 
-        // Try to get the object with the provided path
+        // Try to get the object
         let object = await env.R2_BUCKET.get(payload.path, {
           range: range ? parseRange(range) : undefined
         });
 
-        // If not found, try alternative path formats to handle potential inconsistencies
+        // If not found, try to find the file
         if (!object) {
-          console.log("R2 object not found at primary path:", payload.path);
-
-          // Try different variations of the path
-          const pathParts = payload.path.split('/');
-          if (pathParts.length >= 2) {
-            const fileName = pathParts[pathParts.length - 1];
-            const folderName = pathParts.slice(0, -1).join('/');
-
-            // Try with different folder names that might have been stored differently
-            const alternativePaths = [
-              // Try with common variations
-              `${folderName.replace(/ /g, '_')}/${fileName}`,  // Replace spaces with underscores
-              `${folderName.replace(/_/g, ' ')}/${fileName}`,  // Replace underscores with spaces
-              `${folderName.replace(/ /g, '')}/${fileName}`,   // Remove all spaces
-              `${folderName.replace(/_/g, '')}/${fileName}`,   // Remove all underscores
-            ];
-
-            for (const altPath of alternativePaths) {
-              if (altPath !== payload.path) {
-                console.log("Trying alternative path:", altPath);
-                object = await env.R2_BUCKET.get(altPath, {
-                  range: range ? parseRange(range) : undefined
-                });
-
-                if (object) {
-                  console.log("Found object at alternative path:", altPath);
-                  break;
-                }
-              }
+          console.log("Primary path not found, searching for file...");
+          
+          // List all objects and try to find matching file
+          const list = await env.R2_BUCKET.list({ limit: 1000 });
+          const fileName = payload.path.split('/').pop();
+          
+          console.log(`Searching for file: ${fileName}`);
+          console.log(`Total objects in bucket: ${list.objects.length}`);
+          
+          // Try exact match first
+          const exactMatch = list.objects.find(obj => obj.key === payload.path);
+          if (exactMatch) {
+            console.log("Found exact match:", exactMatch.key);
+            object = await env.R2_BUCKET.get(exactMatch.key, {
+              range: range ? parseRange(range) : undefined
+            });
+          }
+          
+          // Try filename match
+          if (!object) {
+            const filenameMatch = list.objects.find(obj => obj.key.endsWith(`/${fileName}`) || obj.key === fileName);
+            if (filenameMatch) {
+              console.log("Found filename match:", filenameMatch.key);
+              object = await env.R2_BUCKET.get(filenameMatch.key, {
+                range: range ? parseRange(range) : undefined
+              });
             }
-
-            // If still not found, try a more comprehensive search by listing objects in the bucket
-            if (!object) {
-              console.log("Object not found with alternative paths, trying to find by filename...");
-              try {
-                // First, try to list objects in the main video folder to find the file
-                const list = await env.R2_BUCKET.list({ prefix: 'drama-videos/' });
-                const matchingObjects = list.objects.filter(obj =>
-                  obj.key.endsWith(`/${fileName}`) || obj.key === fileName
-                );
-
-                if (matchingObjects.length > 0) {
-                  // Use the first matching object
-                  const foundPath = matchingObjects[0].key;
-                  console.log("Found matching file at path:", foundPath);
-                  object = await env.R2_BUCKET.get(foundPath, {
-                    range: range ? parseRange(range) : undefined
-                  });
-                }
-              } catch (e) {
-                console.error("Error during comprehensive search:", e);
-              }
-            }
+          }
+          
+          // List available files for debugging
+          if (!object && list.objects.length > 0) {
+            console.log("Available files in R2:");
+            list.objects.slice(0, 20).forEach(obj => {
+              console.log(`  - ${obj.key}`);
+            });
           }
         }
 
         if (!object) {
-          console.log("R2 object not found at path:", payload.path);
-          // List some objects in the bucket to help debug
-          try {
-            const list = await env.R2_BUCKET.list({ prefix: payload.path.split('/')[0] + '/' });
-            console.log("Objects in the same folder:", list.objects.map(obj => obj.key));
-          } catch (e) {
-            console.log("Could not list objects in bucket:", e);
-          }
-          return new Response("Not Found", { status: 404, headers: cors });
+          console.log("R2 object not found at any path");
+          return new Response("Video not found in storage", { status: 404, headers: cors });
         }
 
-        console.log("Successfully accessed R2 object at path:", payload.path);
+        console.log("Successfully accessed R2 object");
         console.log("Object metadata:", {
           size: object.size,
           uploaded: object.uploaded,
           httpEtag: object.httpEtag,
-          httpMetadata: object.httpMetadata
+          contentType: object.httpMetadata?.contentType
         });
 
         const headers = new Headers(cors);
 
-        // Use the content type from R2 object if available, otherwise default to video/mp4
+        // Set content type
         const contentType = object.httpMetadata?.contentType || "video/mp4";
         headers.set("Content-Type", contentType);
-
-        // Also set other useful metadata from R2 object
-        if (object.httpMetadata?.contentDisposition) {
-          headers.set("Content-Disposition", object.httpMetadata.contentDisposition);
-        }
-        if (object.httpMetadata?.cacheControl) {
-          headers.set("Cache-Control", object.httpMetadata.cacheControl);
-        } else {
-          headers.set("Cache-Control", "no-store");
-        }
-        if (object.httpMetadata?.contentEncoding) {
-          headers.set("Content-Encoding", object.httpMetadata.contentEncoding);
-        }
-        if (object.httpMetadata?.contentLanguage) {
-          headers.set("Content-Language", object.httpMetadata.contentLanguage);
-        }
-
-        // Add Content-Length header for accurate file size
-        if (object.size) {
-          headers.set("Content-Length", object.size.toString());
-        }
-
-        // Additional headers for better compatibility with Telegram and other platforms
+        
+        // Essential headers for video streaming
         headers.set("Accept-Ranges", "bytes");
+        headers.set("Cache-Control", "public, max-age=3600");
+        headers.set("Content-Disposition", "inline");
+        
+        // Security headers
         headers.set("X-Content-Type-Options", "nosniff");
-        headers.set("X-Frame-Options", "SAMEORIGIN");
-        headers.set("X-XSS-Protection", "1; mode=block");
-
-        // Preserve all important metadata from R2 object
+        
+        // Set ETag and Last-Modified
         if (object.httpEtag) {
           headers.set("ETag", object.httpEtag);
         }
@@ -328,47 +305,21 @@ const supabaseQuery = async (path) => {
           headers.set("Last-Modified", new Date(object.uploaded).toUTCString());
         }
 
-        // Additional headers specifically for video streaming compatibility
-        headers.set("Content-Disposition", "inline");
-        headers.set("X-Permitted-Cross-Domain-Policies", "none");
-
-        // Essential headers for video compatibility
-        headers.set("Accept-Ranges", "bytes");
-        headers.set("Content-Transfer-Encoding", "binary");
-
-        // More specific headers for Telegram compatibility
-        headers.set("X-Content-Transfer-Options", "content");
-        headers.set("X-Playback-Session-Id", "harch-video-player");
-
-        // Check if request is coming from Telegram and add specific headers if needed
-        const userAgent = request.headers.get('User-Agent') || '';
-        if (userAgent.toLowerCase().includes('telegram')) {
-          // Additional headers for Telegram compatibility
-          headers.set("Connection", "keep-alive");
-          headers.set("X-Content-Type-Options", "nosniff");
-          // Some Telegram clients might need specific headers
-          headers.set("Access-Control-Allow-Origin", "*");
-          headers.set("Timing-Allow-Origin", "*");
-          headers.set("X-Frame-Options", "SAMEORIGIN");
-
-          // Additional headers that might be needed by Telegram
-          headers.set("X-Content-Playback-Allowed", "true");
-          headers.set("X-Content-Duration", (object.size / 1000000).toString()); // Approximate duration
-        }
-
+        // Handle range requests
         if (range && object.range) {
-          headers.set(
-            "Content-Range",
-            `bytes ${object.range.offset}-${object.range.end}/${object.size}`
-          );
+          const { offset, end } = object.range;
+          headers.set("Content-Range", `bytes ${offset}-${end}/${object.size}`);
+          headers.set("Content-Length", String(end - offset + 1));
           return new Response(object.body, { status: 206, headers });
         }
 
+        // Full response
+        headers.set("Content-Length", String(object.size));
         return new Response(object.body, { status: 200, headers });
 
       } catch (e) {
         console.error("Stream error:", e);
-        return new Response("Stream error", { status: 500, headers: cors });
+        return new Response("Stream error: " + e.message, { status: 500, headers: cors });
       }
     }
 
