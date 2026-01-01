@@ -104,14 +104,19 @@ const supabaseQuery = async (path) => {
 
         if (!code) return json({ error: "invalid code" }, 400);
 
+        console.log("Fetching video with code:", code);
+        console.log("User ID:", userId);
+
         const videos = await supabaseQuery(
           `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_url,file_id,category,title,description`
         );
 
+        console.log("Videos query result:", videos);
 
         if (!videos.length) return json({ error: "not found" }, 404);
 
         const video = videos[0];
+        console.log("Selected video:", JSON.stringify(video));
 
         if (video.category === "vip") {
           if (!userId) return json({ error: "VIP required" }, 403);
@@ -120,6 +125,7 @@ const supabaseQuery = async (path) => {
             `users?user_id=eq.${encodeURIComponent(userId)}&select=vip_status,vip_expired_date`
           );
 
+          console.log("Users query result:", users);
 
           if (
             !users.length ||
@@ -138,6 +144,12 @@ const supabaseQuery = async (path) => {
         console.log("Video record from Supabase:", JSON.stringify(video));
         console.log("R2 path from database:", r2Path);
 
+        // Validate that we have a valid path to work with
+        if (!r2Path || typeof r2Path !== 'string') {
+          console.error("No valid path found in database for video:", video);
+          return json({ error: "Invalid video path configuration in database" }, 500);
+        }
+
         // Extract the R2 object path from the public URL if needed
         // If video_url is a public URL, extract the path part after the domain
         let pathForToken = r2Path;
@@ -155,6 +167,13 @@ const supabaseQuery = async (path) => {
         }
 
         console.log("Final path for token:", pathForToken);
+
+        // Ensure pathForToken is valid before creating token
+        if (!pathForToken || typeof pathForToken !== 'string' || pathForToken.trim() === '') {
+          console.error("Invalid path for token:", pathForToken);
+          return json({ error: "Invalid video path configuration" }, 500);
+        }
+
         const token = await signToken({
           path: pathForToken,
           exp: Date.now() + 30_000
@@ -167,8 +186,8 @@ const supabaseQuery = async (path) => {
         });
 
       } catch (e) {
-        console.error(e);
-        return json({ error: "server error" }, 500);
+        console.error("Error in /api/video endpoint:", e);
+        return json({ error: "server error", message: e.message }, 500);
       }
     }
 
@@ -190,14 +209,79 @@ const supabaseQuery = async (path) => {
           });
         }
 
+        // Validate payload path
+        if (!payload.path || typeof payload.path !== 'string') {
+          console.error("Invalid payload path:", payload.path);
+          return new Response("Invalid path in token", { status: 400, headers: cors });
+        }
+
         const range = request.headers.get("Range");
         // Log the path being accessed for debugging
         console.log("Attempting to access R2 object at path:", payload.path);
         console.log("Request headers:", JSON.stringify([...request.headers]));
 
-        const object = await env.R2_BUCKET.get(payload.path, {
+        // Try to get the object with the provided path
+        let object = await env.R2_BUCKET.get(payload.path, {
           range: range ? parseRange(range) : undefined
         });
+
+        // If not found, try alternative path formats to handle potential inconsistencies
+        if (!object) {
+          console.log("R2 object not found at primary path:", payload.path);
+
+          // Try different variations of the path
+          const pathParts = payload.path.split('/');
+          if (pathParts.length >= 2) {
+            const fileName = pathParts[pathParts.length - 1];
+            const folderName = pathParts.slice(0, -1).join('/');
+
+            // Try with different folder names that might have been stored differently
+            const alternativePaths = [
+              // Try with common variations
+              `${folderName.replace(/ /g, '_')}/${fileName}`,  // Replace spaces with underscores
+              `${folderName.replace(/_/g, ' ')}/${fileName}`,  // Replace underscores with spaces
+              `${folderName.replace(/ /g, '')}/${fileName}`,   // Remove all spaces
+              `${folderName.replace(/_/g, '')}/${fileName}`,   // Remove all underscores
+            ];
+
+            for (const altPath of alternativePaths) {
+              if (altPath !== payload.path) {
+                console.log("Trying alternative path:", altPath);
+                object = await env.R2_BUCKET.get(altPath, {
+                  range: range ? parseRange(range) : undefined
+                });
+
+                if (object) {
+                  console.log("Found object at alternative path:", altPath);
+                  break;
+                }
+              }
+            }
+
+            // If still not found, try a more comprehensive search by listing objects in the bucket
+            if (!object) {
+              console.log("Object not found with alternative paths, trying to find by filename...");
+              try {
+                // First, try to list objects in the main video folder to find the file
+                const list = await env.R2_BUCKET.list({ prefix: 'drama-videos/' });
+                const matchingObjects = list.objects.filter(obj =>
+                  obj.key.endsWith(`/${fileName}`) || obj.key === fileName
+                );
+
+                if (matchingObjects.length > 0) {
+                  // Use the first matching object
+                  const foundPath = matchingObjects[0].key;
+                  console.log("Found matching file at path:", foundPath);
+                  object = await env.R2_BUCKET.get(foundPath, {
+                    range: range ? parseRange(range) : undefined
+                  });
+                }
+              } catch (e) {
+                console.error("Error during comprehensive search:", e);
+              }
+            }
+          }
+        }
 
         if (!object) {
           console.log("R2 object not found at path:", payload.path);
