@@ -26,8 +26,8 @@ export default {
       const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
         headers: {
           apikey: env.SUPABASE_SERVICE_KEY,
-          Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`
-          Accept: "application/json"
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY
+          Accept: "application/json"}`
         }
       });
       if (!res.ok) throw new Error("Supabase error");
