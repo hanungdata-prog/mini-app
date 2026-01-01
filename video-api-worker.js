@@ -135,14 +135,6 @@ export default {
         }
         
         const object = await env.R2_BUCKET.get(videoPath);
-        
-        if (!object) {
-          console.log('❌ Video not in R2:', videoPath);
-          // Fallback to public video
-          const publicUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-          return Response.redirect(publicUrl, 302);
-        }
-        
         const headers = new Headers(corsHeaders);
         headers.set("Content-Type", "video/mp4");
         headers.set("Accept-Ranges", "bytes");
