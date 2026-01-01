@@ -1,6 +1,9 @@
 export default {
   async fetch(request, env) {
-    const cors = {
+    const url = new URL(request.url);
+    
+    // CORS headers
+    const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Range",
@@ -8,184 +11,212 @@ export default {
     };
 
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: cors });
+      return new Response(null, { headers: corsHeaders });
     }
 
-    const url = new URL(request.url);
-
-    const json = (data, status = 200) =>
-      new Response(JSON.stringify(data), {
-        status,
-        headers: { ...cors, "Content-Type": "application/json" }
-      });
-
-    // =========================
-    // API: VIDEO METADATA
-    // =========================
+    // ==================== API: GET VIDEO METADATA ====================
     if (url.pathname === "/api/video") {
+      const code = url.searchParams.get("code");
+      
+      if (!code) {
+        return jsonResponse({ error: "Video code required" }, 400, corsHeaders);
+      }
+
       try {
-        const code = url.searchParams.get("code");
-
-        if (!code) return json({ error: "Missing video code" }, 400);
-
-        // Query Supabase for video metadata
-        const supabaseUrl = `${env.SUPABASE_URL}/rest/v1/videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_url,title,description,category`;
+        // 1. Validasi format code
+        const cleanCode = code.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
         
-        const response = await fetch(supabaseUrl, {
-          method: "GET",
+        // 2. Query database
+        const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?deep_link_code=eq.${cleanCode}&select=id,video_url,title,description,category,is_active`;
+        
+        const dbResponse = await fetch(dbUrl, {
           headers: {
-            apikey: env.SUPABASE_SERVICE_KEY,
-            Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-            Accept: "application/json"
+            "apikey": env.SUPABASE_SERVICE_KEY,
+            "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`
           }
         });
 
-        if (!response.ok) {
-          return json({ error: "Database error" }, 500);
-        }
-
-        const videos = await response.json();
-
-        if (!videos || !videos.length) {
-          return json({ error: "Video not found" }, 404);
+        const videos = await dbResponse.json();
+        
+        if (!videos || videos.length === 0) {
+          return jsonResponse({ error: "Video not found" }, 404, corsHeaders);
         }
 
         const video = videos[0];
-
-        // Check VIP status
-        if (video.category === "vip") {
-          // For VIP content, return VIP required error
-          return json({ 
-            error: "VIP required",
-            title: video.title,
-            description: video.description 
-          }, 403);
+        
+        // 3. Check if video is active
+        if (video.is_active === false) {
+          return jsonResponse({ error: "Video is not available" }, 403, corsHeaders);
         }
-
-        // For non-VIP content, generate signed token
-        const payload = {
-          path: video.video_url,
-          exp: Date.now() + 30000 // 30 seconds
-        };
-
-        // Sign token
-        const data = JSON.stringify(payload);
-        const key = await crypto.subtle.importKey(
-          "raw",
-          new TextEncoder().encode(env.STREAM_SECRET),
-          { name: "HMAC", hash: "SHA-256" },
-          false,
-          ["sign"]
+        
+        // 4. Generate signed URL (valid 1 hour)
+        const expires = Math.floor(Date.now() / 1000) + 3600; // 1 hour
+        const signature = await generateSignature(
+          `${video.id}-${expires}`,
+          env.STREAM_SECRET
         );
         
-        const signature = await crypto.subtle.sign(
-          "HMAC",
-          key,
-          new TextEncoder().encode(data)
-        );
+        // 5. Return stream URL with signature
+        const streamUrl = `https://${url.hostname}/api/stream/${video.id}?exp=${expires}&sig=${signature}`;
         
-        const token = btoa(data) + "." + btoa(String.fromCharCode(...new Uint8Array(signature)));
-
-        return json({
+        return jsonResponse({
           title: video.title,
           description: video.description,
-          stream_url: `https://mini-app.dramachinaharch.workers.dev/api/video/stream?token=${encodeURIComponent(token)}`
-        });
-
+          stream_url: streamUrl
+        }, 200, corsHeaders);
+        
       } catch (error) {
-        console.error("Video metadata error:", error);
-        return json({ error: "Server error" }, 500);
+        console.error("API Error:", error);
+        return jsonResponse({ error: "Server error" }, 500, corsHeaders);
       }
     }
 
-    // =========================
-    // API: VIDEO STREAM
-    // =========================
-    if (url.pathname === "/api/video/stream") {
+    // ==================== API: STREAM VIDEO ====================
+    if (url.pathname.startsWith("/api/stream/")) {
       try {
-        const token = url.searchParams.get("token");
+        const videoId = url.pathname.replace("/api/stream/", "");
+        const expires = url.searchParams.get("exp");
+        const signature = url.searchParams.get("sig");
         
-        if (!token) {
-          return new Response("Forbidden", { status: 403, headers: cors });
+        // 1. Validate signature
+        if (!videoId || !expires || !signature) {
+          return new Response("Invalid request", { status: 400 });
         }
-
-        // Verify token
-        const [payloadB64, sigB64] = token.split(".");
-        if (!payloadB64 || !sigB64) {
-          return new Response("Invalid token", { status: 403, headers: cors });
-        }
-
-        const payload = JSON.parse(atob(payloadB64));
         
-        if (payload.exp < Date.now()) {
-          return new Response("Token expired", { status: 403, headers: cors });
+        const expectedSig = await generateSignature(
+          `${videoId}-${expires}`,
+          env.STREAM_SECRET
+        );
+        
+        if (signature !== expectedSig) {
+          return new Response("Invalid signature", { status: 403 });
+        }
+        
+        // 2. Check expiration
+        const now = Math.floor(Date.now() / 1000);
+        if (parseInt(expires) < now) {
+          return new Response("URL expired", { status: 403 });
+        }
+        
+        // 3. Get video path from database
+        const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?id=eq.${videoId}&select=video_url`;
+        
+        const dbResponse = await fetch(dbUrl, {
+          headers: {
+            "apikey": env.SUPABASE_SERVICE_KEY,
+            "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`
+          }
+        });
+
+        const videos = await dbResponse.json();
+        
+        if (!videos || videos.length === 0) {
+          return new Response("Video not found", { status: 404 });
         }
 
-        // Verify signature
-        const key = await crypto.subtle.importKey(
-          "raw",
-          new TextEncoder().encode(env.STREAM_SECRET),
-          { name: "HMAC", hash: "SHA-256" },
-          false,
-          ["verify"]
-        );
-
-        const valid = await crypto.subtle.verify(
-          "HMAC",
-          key,
-          Uint8Array.from(atob(sigB64), c => c.charCodeAt(0)),
-          new TextEncoder().encode(JSON.stringify(payload))
-        );
-
-        if (!valid) {
-          return new Response("Invalid signature", { status: 403, headers: cors });
-        }
-
-        // Get video from R2
+        const videoPath = videos[0].video_url;
+        
+        // 4. Get video from R2 (private bucket)
         const range = request.headers.get("Range");
-        const object = await env.R2_BUCKET.get(payload.path, {
+        const object = await env.R2_BUCKET.get(videoPath, {
           range: range ? parseRange(range) : undefined
         });
 
         if (!object) {
-          return new Response("Video not found", { status: 404, headers: cors });
+          return new Response("Video file not found", { status: 404 });
         }
 
-        const headers = new Headers(cors);
-        headers.set("Content-Type", "video/mp4");
+        // 5. Stream video with proper headers
+        const headers = new Headers(corsHeaders);
+        headers.set("Content-Type", getVideoContentType(videoPath));
         headers.set("Accept-Ranges", "bytes");
-        headers.set("Cache-Control", "no-store");
+        headers.set("Cache-Control", "private, max-age=3600"); // Cache 1 hour
+        
+        // Optional: Add download prevention
         headers.set("X-Content-Type-Options", "nosniff");
-
+        
         if (range && object.range) {
-          headers.set(
-            "Content-Range",
+          headers.set("Content-Range", 
             `bytes ${object.range.offset}-${object.range.end}/${object.size}`
           );
-          return new Response(object.body, { status: 206, headers });
+          return new Response(object.body, { 
+            status: 206, 
+            headers 
+          });
         }
 
-        return new Response(object.body, { status: 200, headers });
-
+        headers.set("Content-Length", object.size);
+        return new Response(object.body, { 
+          status: 200, 
+          headers 
+        });
+        
       } catch (error) {
-        console.error("Stream error:", error);
-        return new Response("Stream error", { status: 500, headers: cors });
+        console.error("Stream Error:", error);
+        return new Response("Stream error", { status: 500, headers: corsHeaders });
       }
     }
 
-    return json({ error: "Not Found" }, 404);
+    // Default response
+    return new Response("Video Streaming API", { status: 200 });
   }
 };
 
+// ==================== HELPER FUNCTIONS ====================
+
+function jsonResponse(data, status = 200, corsHeaders = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      ...corsHeaders
+    }
+  });
+}
+
+async function generateSignature(data, secret) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(data)
+  );
+  
+  // Convert to hex string
+  return Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 function parseRange(range) {
-  const m = range.match(/bytes=(\d+)-(\d*)/);
-  if (!m) return undefined;
-
-  const start = Number(m[1]);
-  const end = m[2] ? Number(m[2]) : undefined;
-
+  const match = range.match(/bytes=(\d+)-(\d*)/);
+  if (!match) return undefined;
+  
+  const start = parseInt(match[1]);
+  const end = match[2] ? parseInt(match[2]) : undefined;
+  
   return {
     offset: start,
     length: end ? end - start + 1 : undefined
   };
+}
+
+function getVideoContentType(filename) {
+  const ext = filename.toLowerCase().split('.').pop();
+  switch (ext) {
+    case 'mp4': return 'video/mp4';
+    case 'webm': return 'video/webm';
+    case 'ogg': return 'video/ogg';
+    case 'mov': return 'video/quicktime';
+    case 'm3u8': return 'application/x-mpegURL';
+    default: return 'video/mp4';
+  }
 }
