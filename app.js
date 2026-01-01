@@ -874,22 +874,22 @@ class VideoPlayerApp {
                 <i class="fas fa-crown" style="font-size: 48px; color: #ffd700; margin-bottom: 15px;"></i>
             </div>
             <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px; color: #fff;">
-                VIP Content
+                Konten VIP
             </div>
             <div style="font-size: 14px; color: #ffb3b3; margin-bottom: 20px; line-height: 1.5;">
-                ${data.access.message || 'This video is for VIP members only'}
+                ${data.access.message || 'Video ini kusus member VIP'}
             </div>
             ${data.access.vip_expired ? `
                 <div style="font-size: 13px; color: #ff8888; margin-bottom: 15px; padding: 10px; background: rgba(255,68,68,0.1); border-radius: 8px;">
-                    <i class="fas fa-exclamation-circle"></i> Your VIP membership has expired
+                    <i class="fas fa-exclamation-circle"></i> Akses VIP Anda telah berakhir.
                     ${data.access.vip_expired_date ? `<br>Expired: ${new Date(data.access.vip_expired_date).toLocaleDateString()}` : ''}
                 </div>
             ` : ''}
             <button class="retry-btn" onclick="window.videoPlayerApp.openVipPurchase()" style="background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%); color: #000; font-weight: bold; padding: 12px 30px; font-size: 16px; margin-bottom: 10px; width: 80%; max-width: 250px;">
-                <i class="fas fa-crown"></i> Upgrade to VIP
+                <i class="fas fa-crown"></i> Beli Akses VIP
             </button>
             <div style="font-size: 12px; color: #aaa; margin-top: 10px;">
-                Get unlimited access to all VIP content
+                Dapatkan akses tak terbatas ke semua konten VIP.
             </div>
         `;
         
