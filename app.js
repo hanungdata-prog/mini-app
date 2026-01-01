@@ -307,10 +307,12 @@ class VideoPlayerApp {
         // Set attributes for better Telegram compatibility
         this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
         this.videoPlayer.setAttribute('disableRemotePlayback', 'true');
-        this.videoPlayer.setAttribute('preload', 'metadata');
+        this.videoPlayer.setAttribute('preload', 'auto');
         this.videoPlayer.setAttribute('playsinline', 'true');
         this.videoPlayer.setAttribute('webkit-playsinline', 'true');
         this.videoPlayer.setAttribute('x-webkit-airplay', 'deny');
+        // Remove crossorigin for Telegram compatibility
+        this.videoPlayer.removeAttribute('crossorigin');
         
         // Force video to load
         this.videoPlayer.load();
