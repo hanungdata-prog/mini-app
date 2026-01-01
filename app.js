@@ -167,7 +167,11 @@ class VideoPlayerApp {
             this.loadingIndicator.style.display = 'flex';
             this.errorMessage.style.display = 'none';
             
+            console.log('Deep Link Code:', this.deepLinkCode);
+            console.log('User ID:', this.userId);
+            
             if (!this.deepLinkCode || !/^[a-zA-Z0-9]{6,10}$/.test(this.deepLinkCode)) {
+                console.error('Invalid code format:', this.deepLinkCode);
                 throw new Error('Invalid video code format');
             }
             
