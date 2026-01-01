@@ -102,8 +102,9 @@ export default {
           if (!userId) return json({ error: "VIP required" }, 403);
 
           const users = await supabaseQuery(
-            `users?user_id=eq.${userId}&select=vip_status,vip_expired_date`
+            `users?user_id=eq.${encodeURIComponent(userId)}&select=vip_status,vip_expired_date`
           );
+          
 
           if (
             !users.length ||
@@ -186,6 +187,11 @@ export default {
     return json({ error: "Not Found" }, 404);
   }
 };
+const res = await fetch(...);
+console.log("Supabase URL:", `${env.SUPABASE_URL}/rest/v1/${path}`);
+console.log("Supabase status:", res.status);
+const text = await res.text();
+console.log("Supabase response:", text);
 
 // =========================
 // RANGE HELPER
