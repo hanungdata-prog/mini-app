@@ -1,10 +1,10 @@
 export default {
   async fetch(request, env) {
     const cors = {
-      "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+      "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Range, Accept, X-Requested-With",
-      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length, Content-Type"
+      "Access-Control-Allow-Headers": "Content-Type, Range, Accept, X-Requested-With, User-Agent",
+      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length, Content-Type, ETag, Last-Modified"
     };
 
     if (request.method === "OPTIONS") {
@@ -22,32 +22,31 @@ export default {
         headers: { ...cors, "Content-Type": "application/json" }
       });
 
-const supabaseQuery = async (path) => {
-  const url = `${env.SUPABASE_URL}/rest/v1/${path}`;
+    const supabaseQuery = async (path) => {
+      const url = `${env.SUPABASE_URL}/rest/v1/${path}`;
 
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      apikey: env.SUPABASE_SERVICE_KEY,
-      Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Prefer: "return=representation"
-    }
-  });
+      const res = await fetch(url, {
+        method: "GET",
+        headers: {
+          apikey: env.SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Prefer: "return=representation"
+        }
+      });
 
-  const text = await res.text();
+      const text = await res.text();
 
-  if (!res.ok) {
-    console.error("Supabase URL:", url);
-    console.error("Supabase status:", res.status);
-    console.error("Supabase response:", text);
-    throw new Error("Supabase error");
-  }
+      if (!res.ok) {
+        console.error("Supabase URL:", url);
+        console.error("Supabase status:", res.status);
+        console.error("Supabase response:", text);
+        throw new Error("Supabase error");
+      }
 
-  return JSON.parse(text);
-};
-
+      return JSON.parse(text);
+    };
 
     // =========================
     // TOKEN UTILS
@@ -108,7 +107,6 @@ const supabaseQuery = async (path) => {
           `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_url,category,title,description`
         );
 
-
         if (!videos.length) return json({ error: "not found" }, 404);
 
         const video = videos[0];
@@ -119,7 +117,6 @@ const supabaseQuery = async (path) => {
           const users = await supabaseQuery(
             `users?user_id=eq.${encodeURIComponent(userId)}&select=vip_status,vip_expired_date`
           );
-          
 
           if (
             !users.length ||
@@ -130,16 +127,20 @@ const supabaseQuery = async (path) => {
           }
         }
 
-        // 🔐 token 30 detik
+        // 🔧 FIX: Perpanjang token menjadi 10 menit (600 detik)
+        // Untuk video besar, 30 detik terlalu pendek
         const token = await signToken({
           path: video.video_url,
-          exp: Date.now() + 30_000
+          exp: Date.now() + 600_000  // 10 menit
         });
+
+        // 🔧 FIX: Return ABSOLUTE URL, bukan relative
+        const streamUrl = `${url.origin}/api/video/stream?token=${encodeURIComponent(token)}`;
 
         return json({
           title: video.title,
           description: video.description,
-          stream_url: `https://mini-app.dramachinaharch.workers.dev/api/video/stream?token=${encodeURIComponent(token)}`
+          stream_url: streamUrl
         });
 
       } catch (e) {
@@ -166,10 +167,18 @@ const supabaseQuery = async (path) => {
           });
         }
 
-        const range = request.headers.get("Range");
-        const object = await env.R2_BUCKET.get(payload.path, {
-          range: range ? parseRange(range) : undefined
-        });
+        // 🔧 FIX: Parse range request dengan benar
+        const rangeHeader = request.headers.get("Range");
+        let range = undefined;
+        
+        if (rangeHeader) {
+          range = parseRange(rangeHeader);
+        }
+
+        // 🔧 FIX: Fetch dari R2 dengan proper range
+        const object = await env.R2_BUCKET.get(payload.path, 
+          range ? { range } : undefined
+        );
 
         if (!object) {
           return new Response("Not Found", { status: 404, headers: cors });
@@ -177,61 +186,41 @@ const supabaseQuery = async (path) => {
 
         const headers = new Headers(cors);
 
-        // Use the content type from R2 object if available, otherwise default to video/mp4
-        const contentType = object.httpMetadata?.contentType || "video/mp4";
-        headers.set("Content-Type", contentType);
-
-        // Also set other useful metadata from R2 object
-        if (object.httpMetadata?.contentDisposition) {
-          headers.set("Content-Disposition", object.httpMetadata.contentDisposition);
-        }
-        if (object.httpMetadata?.cacheControl) {
-          headers.set("Cache-Control", object.httpMetadata.cacheControl);
-        } else {
-          headers.set("Cache-Control", "no-store");
-        }
-        if (object.httpMetadata?.contentEncoding) {
-          headers.set("Content-Encoding", object.httpMetadata.contentEncoding);
-        }
-        if (object.httpMetadata?.contentLanguage) {
-          headers.set("Content-Language", object.httpMetadata.contentLanguage);
-        }
-
-        // Add Content-Length header for accurate file size
-        if (object.size) {
-          headers.set("Content-Length", object.size.toString());
-        }
-
-        // Additional headers for better compatibility with Telegram and other platforms
+        // 🔧 FIX: Selalu set Content-Type sebagai video/mp4
+        headers.set("Content-Type", "video/mp4");
+        
+        // 🔧 FIX: Headers penting untuk streaming
         headers.set("Accept-Ranges", "bytes");
+        headers.set("Cache-Control", "public, max-age=31536000"); // Cache 1 tahun
         headers.set("X-Content-Type-Options", "nosniff");
-        headers.set("X-Frame-Options", "SAMEORIGIN");
-        headers.set("X-XSS-Protection", "1; mode=block");
 
-        // Preserve all important metadata from R2 object
+        // ETag untuk caching
         if (object.httpEtag) {
           headers.set("ETag", object.httpEtag);
         }
+
         if (object.uploaded) {
           headers.set("Last-Modified", new Date(object.uploaded).toUTCString());
         }
 
-        // Check if request is coming from Telegram and add specific headers if needed
-        const userAgent = request.headers.get('User-Agent') || '';
-        if (userAgent.toLowerCase().includes('telegram')) {
-          // Additional headers for Telegram compatibility
-          headers.set("Connection", "keep-alive");
-        }
-
+        // 🔧 FIX: Handle range request dengan benar
         if (range && object.range) {
-          headers.set(
-            "Content-Range",
-            `bytes ${object.range.offset}-${object.range.end}/${object.size}`
-          );
-          return new Response(object.body, { status: 206, headers });
+          const { offset, end } = object.range;
+          headers.set("Content-Length", (end - offset + 1).toString());
+          headers.set("Content-Range", `bytes ${offset}-${end}/${object.size}`);
+          
+          return new Response(object.body, { 
+            status: 206,  // Partial Content
+            headers 
+          });
         }
 
-        return new Response(object.body, { status: 200, headers });
+        // Full content
+        headers.set("Content-Length", object.size.toString());
+        return new Response(object.body, { 
+          status: 200, 
+          headers 
+        });
 
       } catch (e) {
         console.error("Stream error:", e);
@@ -244,17 +233,17 @@ const supabaseQuery = async (path) => {
 };
 
 // =========================
-// RANGE HELPER
+// RANGE HELPER (IMPROVED)
 // =========================
-function parseRange(range) {
-  const m = range.match(/bytes=(\d+)-(\d*)/);
-  if (!m) return undefined;
+function parseRange(rangeHeader) {
+  const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
+  if (!match) return undefined;
 
-  const start = Number(m[1]);
-  const end = m[2] ? Number(m[2]) : undefined;
+  const start = parseInt(match[1], 10);
+  const end = match[2] ? parseInt(match[2], 10) : undefined;
 
   return {
     offset: start,
-    length: end ? end - start + 1 : undefined
+    length: end !== undefined ? (end - start + 1) : undefined
   };
 }
