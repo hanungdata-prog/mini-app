@@ -176,12 +176,10 @@ const supabaseQuery = async (path) => {
         }
 
         const headers = new Headers(cors);
+        headers.set("Content-Type", "video/mp4");
         headers.set("Accept-Ranges", "bytes");
         headers.set("Cache-Control", "no-store");
-        headers.set(
-          "Content-Type",
-          headers.get("Content-Type") || "video/mp4"
-        );
+        headers.set("X-Content-Type-Options", "nosniff");
 
         if (range && object.range) {
           headers.set(
