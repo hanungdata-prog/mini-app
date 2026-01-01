@@ -380,20 +380,17 @@ class VideoPlayerApp {
                 return;
             }
             
-            if (!data.video_url) {
-                throw new Error('Video URL not found in response.');
+            if (!data.stream_url) {
+                throw new Error('Stream URL not found in response.');
             }
-            
+
             this.updateDebugInfo('status', 'Video loaded');
             
             // Update UI
             this.updateVideoMetadata(data);
             
-            // SECURITY: Encrypt URL for reference (but don't use blob for large videos)
-            this.encryptedVideoUrl = this.encryptUrl(data.video_url);
-            
-            // Set video source directly (blob is too slow for large videos)
-            this.setVideoSource(data.video_url);
+            this.encryptedVideoUrl = this.encryptUrl(data.stream_url);
+            this.setVideoSource(data.stream_url);
             
             // Setup event listeners
             this.setupEventListeners();
