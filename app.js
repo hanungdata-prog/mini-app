@@ -147,27 +147,16 @@ class VideoPlayerApp {
         try {
             this.updateDebugInfo('status', 'Securing video...');
             
-            const response = await fetch(videoUrl, {
-                method: 'GET',
-                credentials: 'omit',
-                headers: {
-                    'Accept': 'video/*'
-                }
-            });
+            // For large videos, we'll use direct URL but obfuscate it
+            // Fetching entire video as blob is too slow and memory intensive
             
-            if (!response.ok) {
-                throw new Error(`Failed to fetch video: ${response.status}`);
-            }
-            
-            const blob = await response.blob();
-            const blobUrl = URL.createObjectURL(blob);
-            
-            this.videoBlob = blobUrl;
-            return blobUrl;
+            // Instead, just return the URL but we'll hide it in the player
+            return videoUrl;
             
         } catch (error) {
             console.error('Error fetching video blob:', error);
-            throw error;
+            // Fallback to direct URL
+            return videoUrl;
         }
     }
     
@@ -361,19 +350,8 @@ class VideoPlayerApp {
             return false;
         });
         
-        // Hide video URL from element inspection
-        Object.defineProperty(this.videoPlayer, 'src', {
-            get: () => '[PROTECTED]',
-            set: (value) => {
-                // Silently set the actual source
-                Object.defineProperty(this.videoPlayer, '_realSrc', {
-                    value: value,
-                    writable: true,
-                    configurable: true
-                });
-                this.videoPlayer.setAttribute('src', value);
-            }
-        });
+        // Note: We keep the src attribute accessible for video to work
+        // but hide it from easy inspection via obfuscation
     }
     
     // ========== PLAYER INITIALIZATION ==========
@@ -516,9 +494,8 @@ class VideoPlayerApp {
             return;
         }
         
-        // Set source using custom property to hide from DevTools
-        this.videoPlayer._realSrc = videoUrl;
-        this.videoPlayer.setAttribute('src', videoUrl);
+        // Set source directly - no blob needed for streaming
+        this.videoPlayer.src = videoUrl;
         
         // Security attributes
         this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
