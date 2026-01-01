@@ -1,11 +1,11 @@
 export default {
   async fetch(request, env) {
-    console.log('🚀 Worker called');
+    console.log('🚀 Worker started');
     
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Range, apikey, Authorization",
+      "Access-Control-Allow-Headers": "Content-Type, apikey, Authorization",
       "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges"
     };
 
@@ -19,12 +19,11 @@ export default {
     if (url.pathname === "/api/video") {
       try {
         const code = url.searchParams.get("code");
-        console.log('🎯 API Video called with code:', code);
+        console.log('🎯 Request for code:', code);
         
         if (!code || code.trim() === '') {
           return jsonResponse({ 
-            error: "Video code is required",
-            message: "Please provide a valid video code"
+            error: "Video code is required"
           }, 400, corsHeaders);
         }
 
@@ -32,85 +31,76 @@ export default {
         
         if (cleanCode.length < 3) {
           return jsonResponse({ 
-            error: "Invalid video code",
-            message: "Video code is too short"
+            error: "Invalid video code"
           }, 400, corsHeaders);
         }
 
-        // VERIFY: Cek environment variables
-        console.log('🔧 Env check - SUPABASE_URL:', env.SUPABASE_URL ? 'SET' : 'NOT SET');
-        console.log('🔧 Env check - SUPABASE_ANON_KEY:', env.SUPABASE_ANON_KEY ? 'SET (first 20): ' + env.SUPABASE_ANON_KEY.substring(0, 20) + '...' : 'NOT SET');
+        // VERIFY credentials
+        console.log('🔑 Using Supabase URL:', env.SUPABASE_URL);
+        console.log('🔑 API Key starts with:', env.SUPABASE_ANON_KEY?.substring(0, 20) + '...');
         
         if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
-          console.error('❌ Missing Supabase credentials');
+          console.error('❌ Missing credentials');
           return jsonResponse({ 
-            error: "Configuration error",
-            message: "Server credentials missing"
+            error: "Server configuration error"
           }, 500, corsHeaders);
         }
 
-        // Query Supabase dengan headers yang benar
-        const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?deep_link_code=eq.${cleanCode}&select=*`;
+        // Query Supabase - PERBAIKAN: Gunakan header yang benar
+        const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?deep_link_code=eq.${cleanCode}`;
         
-        console.log('📡 Querying Supabase:', dbUrl);
-        console.log('🔑 Using API Key:', env.SUPABASE_ANON_KEY.substring(0, 10) + '...');
+        console.log('📡 Querying:', dbUrl);
         
         const dbResponse = await fetch(dbUrl, {
           headers: {
             "apikey": env.SUPABASE_ANON_KEY,
             "Authorization": `Bearer ${env.SUPABASE_ANON_KEY}`,
-            "Accept": "application/json",
-            "Content-Type": "application/json"
+            "Accept": "application/json"
           }
         });
 
-        console.log('📊 Database response status:', dbResponse.status);
-        console.log('📊 Database response headers:', Object.fromEntries(dbResponse.headers.entries()));
+        console.log('📊 Response status:', dbResponse.status);
         
         if (!dbResponse.ok) {
-          const errorText = await dbResponse.text();
+          let errorText = await dbResponse.text();
           console.error('❌ Database error:', errorText);
           
-          // Test connection tanpa filter
-          const testUrl = `${env.SUPABASE_URL}/rest/v1/videos?select=count`;
-          console.log('🧪 Testing connection to:', testUrl);
-          
+          // Coba test connection
           try {
-            const testResponse = await fetch(testUrl, {
+            const testUrl = `${env.SUPABASE_URL}/rest/v1/videos?select=count`;
+            const testResp = await fetch(testUrl, {
               headers: {
                 "apikey": env.SUPABASE_ANON_KEY,
                 "Authorization": `Bearer ${env.SUPABASE_ANON_KEY}`
               }
             });
-            console.log('🧪 Test connection status:', testResponse.status);
-            console.log('🧪 Test response:', await testResponse.text());
-          } catch (testError) {
-            console.error('🧪 Test failed:', testError);
+            console.log('🧪 Test connection status:', testResp.status);
+          } catch (e) {
+            console.error('🧪 Test failed:', e.message);
           }
           
           return jsonResponse({ 
             error: "Database error",
-            message: "Cannot fetch video data",
-            debug: {
-              status: dbResponse.status,
-              error: errorText.substring(0, 200)
-            }
+            debug: `Status: ${dbResponse.status}`
           }, 500, corsHeaders);
         }
 
         const videos = await dbResponse.json();
-        console.log('📊 Videos found:', videos.length);
-        console.log('📊 Videos data:', JSON.stringify(videos, null, 2));
+        console.log('📊 Found videos:', videos.length);
         
         if (!videos || videos.length === 0) {
           return jsonResponse({ 
             error: "Video not found",
-            message: "No video found with code: " + cleanCode
+            message: `No video with code: ${cleanCode}`
           }, 404, corsHeaders);
         }
 
         const video = videos[0];
-        console.log('✅ Video found:', video);
+        console.log('✅ Video data:', {
+          id: video.id,
+          title: video.title,
+          video_url: video.video_url
+        });
         
         // Generate streaming URL
         const streamUrl = `https://${url.hostname}/api/stream/${encodeURIComponent(video.video_url)}`;
@@ -123,11 +113,10 @@ export default {
         }, 200, corsHeaders);
         
       } catch (error) {
-        console.error("❌ API Error:", error);
+        console.error("❌ Unexpected error:", error);
         return jsonResponse({ 
           error: "Server error",
-          message: "An unexpected error occurred",
-          debug: error.message
+          message: error.message
         }, 500, corsHeaders);
       }
     }
@@ -136,9 +125,10 @@ export default {
     if (url.pathname.startsWith("/api/stream/")) {
       try {
         const videoPath = decodeURIComponent(url.pathname.replace("/api/stream/", ""));
+        console.log('🎬 Streaming:', videoPath);
         
         if (!env.R2_BUCKET) {
-          return new Response("Storage not configured", { 
+          return new Response("Storage not available", { 
             status: 500, 
             headers: corsHeaders 
           });
@@ -147,10 +137,10 @@ export default {
         const object = await env.R2_BUCKET.get(videoPath);
         
         if (!object) {
+          console.log('❌ Video not in R2:', videoPath);
           // Fallback to public video
-          console.log('Video not in R2, using public fallback');
-          const fallbackUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
-          return Response.redirect(fallbackUrl, 302);
+          const publicUrl = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+          return Response.redirect(publicUrl, 302);
         }
         
         const headers = new Headers(corsHeaders);
@@ -164,7 +154,7 @@ export default {
         });
         
       } catch (error) {
-        console.error("❌ Stream Error:", error);
+        console.error("❌ Stream error:", error);
         return new Response("Stream error", { 
           status: 500, 
           headers: corsHeaders 
@@ -174,20 +164,24 @@ export default {
 
     // ==================== TEST ENDPOINT ====================
     if (url.pathname === "/api/test") {
-      // Bypass database, langsung return test video
+      console.log('🧪 Test endpoint called');
       return jsonResponse({
         success: true,
-        title: "Test Video (No DB)",
-        description: "Testing without database",
+        title: "Test Video",
+        description: "This is a test video",
         stream_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
       }, 200, corsHeaders);
     }
 
     // Health check
     return jsonResponse({ 
-      message: "Video Streaming API",
+      service: "Video Streaming API",
       status: "online",
-      time: new Date().toISOString()
+      time: new Date().toISOString(),
+      endpoints: {
+        get_video: "/api/video?code=VIDEO_CODE",
+        test: "/api/test"
+      }
     }, 200, corsHeaders);
   }
 };
