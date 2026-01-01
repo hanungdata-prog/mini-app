@@ -78,55 +78,81 @@ export default {
     // =========================
     // API: VIDEO STREAM (AMAN)
     // =========================
-    if (url.pathname === "/api/video/stream") {
-      const code = url.searchParams.get("code");
-      const userId = url.searchParams.get("user_id");
+if (url.pathname === "/api/video/stream") {
+  const code = url.searchParams.get("code");
+  const userId = url.searchParams.get("user_id");
 
-      if (!code) return new Response("Forbidden", { status: 403 });
+  if (!code) {
+    return new Response("Forbidden", {
+      status: 403,
+      headers: cors
+    });
+  }
 
-      // ambil path video
-      const videos = await supabase.query(
-        `videos?deep_link_code=eq.${code}&select=video_path,category`
-      );
+  const videos = await supabase.query(
+    `videos?deep_link_code=eq.${code}&select=video_path,category`
+  );
 
-      if (!videos.length)
-        return new Response("Not Found", { status: 404 });
+  if (!videos.length) {
+    return new Response("Not Found", {
+      status: 404,
+      headers: cors
+    });
+  }
 
-      const video = videos[0];
+  const video = videos[0];
 
-      // cek VIP ulang
-      if (video.category === "vip") {
-        if (!userId) return new Response("Unauthorized", { status: 401 });
-        const ok = await checkVip(userId);
-        if (!ok) return new Response("Forbidden", { status: 403 });
-      }
-
-      // ambil object dari R2 (PRIVATE)
-      const range = request.headers.get("Range");
-      const object = await env.R2_BUCKET.get(video.video_path, {
-        range: range ? parseRange(range) : undefined
+  if (video.category === "vip") {
+    if (!userId) {
+      return new Response("Unauthorized", {
+        status: 401,
+        headers: cors
       });
-
-      if (!object) return new Response("Not Found", { status: 404 });
-
-      const headers = new Headers();
-      object.writeHttpMetadata(headers);
-      headers.set("Accept-Ranges", "bytes");
-
-      if (range) {
-        headers.set(
-          "Content-Range",
-          `bytes ${object.range.offset}-${object.range.end}/${object.size}`
-        );
-      
-        return new Response(object.body, {
-          status: 206,
-          headers
-        });
-      }      
-
-      return new Response(object.body, { headers });
     }
+    const ok = await checkVip(userId);
+    if (!ok) {
+      return new Response("Forbidden", {
+        status: 403,
+        headers: cors
+      });
+    }
+  }
+
+  // ===== AMBIL VIDEO DARI R2 =====
+  const rangeHeader = request.headers.get("Range");
+
+  const object = await env.R2_BUCKET.get(video.video_path, {
+    range: rangeHeader ? parseRange(rangeHeader) : undefined
+  });
+
+  if (!object) {
+    return new Response("Not Found", {
+      status: 404,
+      headers: cors
+    });
+  }
+
+  const headers = new Headers(cors);
+  object.writeHttpMetadata(headers);
+  headers.set("Accept-Ranges", "bytes");
+
+  if (rangeHeader && object.range) {
+    headers.set(
+      "Content-Range",
+      `bytes ${object.range.offset}-${object.range.end}/${object.size}`
+    );
+
+    return new Response(object.body, {
+      status: 206,
+      headers
+    });
+  }
+
+  return new Response(object.body, {
+    status: 200,
+    headers
+  });
+}
 
     return json({ error: "Not Found" }, 404);
   }
