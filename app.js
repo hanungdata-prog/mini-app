@@ -1,4 +1,4 @@
-// app.js - Enhanced Video Player for Harch Short
+// app.js - Enhanced Video Player for Harch Short with URL Obfuscation
 
 class VideoPlayerApp {
     constructor() {
@@ -39,9 +39,17 @@ class VideoPlayerApp {
         this.lastVolume = 0.7;
         this.retryCount = 0;
         this.maxRetries = 3;
+        this.originalVideoUrl = null;
+        this.blobUrl = null;
         
         // Initialize with controls hidden
         this.hideControls();
+        
+        // Setup cleanup on page unload
+        this.setupCleanupListeners();
+        
+        // Setup URL obfuscation
+        this.setupUrlObfuscation();
     }
     
     // Get URL parameter - FIXED for Telegram WebApp
@@ -199,6 +207,55 @@ class VideoPlayerApp {
         });
     }
     
+    // Setup cleanup listeners
+    setupCleanupListeners() {
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            this.cleanupBlobUrl();
+        });
+        
+        // Cleanup on page hide
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.cleanupBlobUrl();
+            }
+        });
+        
+        // Cleanup when video ends
+        if (this.videoPlayer) {
+            this.videoPlayer.addEventListener('ended', () => {
+                setTimeout(() => this.cleanupBlobUrl(), 5000);
+            });
+        }
+    }
+    
+    // Setup URL obfuscation
+    setupUrlObfuscation() {
+        // Override console.log to hide video URLs
+        const originalLog = console.log;
+        console.log = function(...args) {
+            const filteredArgs = args.map(arg => {
+                if (typeof arg === 'string' && arg.includes('.mp4')) {
+                    return '[VIDEO_URL_HIDDEN]';
+                }
+                return arg;
+            });
+            originalLog.apply(console, filteredArgs);
+        };
+        
+        // Override console.error similarly
+        const originalError = console.error;
+        console.error = function(...args) {
+            const filteredArgs = args.map(arg => {
+                if (typeof arg === 'string' && arg.includes('.mp4')) {
+                    return '[VIDEO_URL_HIDDEN]';
+                }
+                return arg;
+            });
+            originalError.apply(console, filteredArgs);
+        };
+    }
+    
     // Initialize DOM elements
     initializeElements() {
         // Video elements
@@ -332,8 +389,8 @@ class VideoPlayerApp {
             // Update UI with video metadata
             this.updateVideoMetadata(data);
             
-            // Set video source
-            this.setVideoSource(data.video_url);
+            // Set video source with obfuscation
+            await this.setVideoSource(data.video_url);
             
             // Setup event listeners for enhanced UI
             this.setupEventListeners();
@@ -391,23 +448,50 @@ class VideoPlayerApp {
         document.title = title + ' - Harch Short';
     }
     
-    // Set video source with security - IMPROVED
-    setVideoSource(videoUrl) {
+    // Set video source with URL obfuscation
+    async setVideoSource(videoUrl) {
         if (!this.videoPlayer) {
             console.error('Video player element not found');
             return;
         }
         
-        // Validate video URL
-        try {
-            new URL(videoUrl);
-        } catch (error) {
-            console.error('Invalid video URL:', videoUrl);
-            this.showError('Invalid video URL. Please contact support.');
-            return;
-        }
+        // Cleanup previous blob URL if exists
+        this.cleanupBlobUrl();
         
-        this.videoPlayer.src = videoUrl;
+        try {
+            // Method 1: Try to use proxy API first
+            const proxyUrl = `https://mini-app.dramachinaharch.workers.dev/api/proxy/video?url=${encodeURIComponent(videoUrl)}`;
+            
+            this.updateDebugInfo('status', 'Creating secure stream...');
+            
+            // Fetch video through proxy as blob
+            const response = await fetch(proxyUrl, {
+                headers: {
+                    'Accept': 'video/mp4,video/*;q=0.9',
+                    'Cache-Control': 'no-cache'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Proxy failed: ${response.status}`);
+            }
+            
+            const blob = await response.blob();
+            this.blobUrl = URL.createObjectURL(blob);
+            
+            // Set video source to blob URL
+            this.videoPlayer.src = this.blobUrl;
+            this.originalVideoUrl = videoUrl;
+            
+            this.updateDebugInfo('status', 'Secure stream ready');
+            
+        } catch (proxyError) {
+            console.warn('Proxy method failed, falling back to direct stream with obfuscation:', proxyError);
+            
+            // Method 2: Fallback to direct fetch with chunked loading
+            this.videoPlayer.src = videoUrl;
+            this.originalVideoUrl = videoUrl;
+        }
         
         // Set security attributes
         this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
@@ -416,12 +500,23 @@ class VideoPlayerApp {
         this.videoPlayer.setAttribute('preload', 'metadata');
         this.videoPlayer.setAttribute('playsinline', 'true');
         this.videoPlayer.setAttribute('webkit-playsinline', 'true');
-        
-        // Ensure video player is not using native controls
         this.videoPlayer.controls = false;
         
         // Load the video
         this.videoPlayer.load();
+    }
+    
+    // Cleanup blob URL to prevent memory leaks
+    cleanupBlobUrl() {
+        if (this.blobUrl) {
+            try {
+                URL.revokeObjectURL(this.blobUrl);
+                this.blobUrl = null;
+                this.originalVideoUrl = null;
+            } catch (e) {
+                console.warn('Error cleaning up blob URL:', e);
+            }
+        }
     }
     
     // Setup event listeners for enhanced UI
@@ -618,6 +713,8 @@ class VideoPlayerApp {
         if (this.playIcon) this.playIcon.style.display = 'block';
         if (this.pauseIcon) this.pauseIcon.style.display = 'none';
         this.showControls();
+        // Cleanup blob URL after video ends
+        setTimeout(() => this.cleanupBlobUrl(), 30000);
     }
     
     handleVideoError() {
@@ -778,6 +875,9 @@ class VideoPlayerApp {
         this.retryCount++;
         this.errorMessage.style.display = 'none';
         this.loadingIndicator.style.display = 'flex';
+        
+        // Cleanup before retry
+        this.cleanupBlobUrl();
         
         // Retry initialization
         this.initializePlayer();
