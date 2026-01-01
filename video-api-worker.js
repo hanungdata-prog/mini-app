@@ -27,6 +27,7 @@ export default {
         headers: {
           apikey: env.SUPABASE_SERVICE_KEY,
           Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`
+          Accept: "application/json"
         }
       });
       if (!res.ok) throw new Error("Supabase error");
@@ -89,8 +90,9 @@ export default {
         if (!code) return json({ error: "invalid code" }, 400);
 
         const videos = await supabaseQuery(
-          `videos?deep_link_code=eq.${code}&select=video_path,category,title,description`
+          `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_path,category,title,description`
         );
+
 
         if (!videos.length) return json({ error: "not found" }, 404);
 
