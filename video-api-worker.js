@@ -105,7 +105,7 @@ const supabaseQuery = async (path) => {
         if (!code) return json({ error: "invalid code" }, 400);
 
         const videos = await supabaseQuery(
-          `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_url,category,title,description`
+          `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_url,file_id,category,title,description`
         );
 
 
@@ -119,7 +119,7 @@ const supabaseQuery = async (path) => {
           const users = await supabaseQuery(
             `users?user_id=eq.${encodeURIComponent(userId)}&select=vip_status,vip_expired_date`
           );
-          
+
 
           if (
             !users.length ||
@@ -131,8 +131,32 @@ const supabaseQuery = async (path) => {
         }
 
         // 🔐 token 30 detik
+        // Use file_id if available, otherwise fall back to video_url
+        // file_id should contain the R2 object path, while video_url is the public URL
+        const r2Path = video.file_id || video.video_url;
+
+        console.log("Video record from Supabase:", JSON.stringify(video));
+        console.log("R2 path from database:", r2Path);
+
+        // Extract the R2 object path from the public URL if needed
+        // If video_url is a public URL, extract the path part after the domain
+        let pathForToken = r2Path;
+        if (r2Path.startsWith('http')) {
+          // Extract path from URL - remove the base URL part to get just the R2 object key
+          try {
+            const urlObj = new URL(r2Path);
+            pathForToken = urlObj.pathname.substring(1); // Remove leading slash
+            console.log("Extracted path from URL:", pathForToken);
+          } catch (e) {
+            console.error("Error parsing video URL:", r2Path, e);
+            // Fallback to original r2Path if parsing fails
+            pathForToken = r2Path;
+          }
+        }
+
+        console.log("Final path for token:", pathForToken);
         const token = await signToken({
-          path: video.video_url,
+          path: pathForToken,
           exp: Date.now() + 30_000
         });
 
@@ -167,13 +191,33 @@ const supabaseQuery = async (path) => {
         }
 
         const range = request.headers.get("Range");
+        // Log the path being accessed for debugging
+        console.log("Attempting to access R2 object at path:", payload.path);
+        console.log("Request headers:", JSON.stringify([...request.headers]));
+
         const object = await env.R2_BUCKET.get(payload.path, {
           range: range ? parseRange(range) : undefined
         });
 
         if (!object) {
+          console.log("R2 object not found at path:", payload.path);
+          // List some objects in the bucket to help debug
+          try {
+            const list = await env.R2_BUCKET.list({ prefix: payload.path.split('/')[0] + '/' });
+            console.log("Objects in the same folder:", list.objects.map(obj => obj.key));
+          } catch (e) {
+            console.log("Could not list objects in bucket:", e);
+          }
           return new Response("Not Found", { status: 404, headers: cors });
         }
+
+        console.log("Successfully accessed R2 object at path:", payload.path);
+        console.log("Object metadata:", {
+          size: object.size,
+          uploaded: object.uploaded,
+          httpEtag: object.httpEtag,
+          httpMetadata: object.httpMetadata
+        });
 
         const headers = new Headers(cors);
 
