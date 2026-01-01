@@ -1,9 +1,10 @@
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const cors = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Range"
+      "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Range",
+      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges"
     };
 
     if (request.method === "OPTIONS") {
@@ -13,7 +14,7 @@ export default {
     const url = new URL(request.url);
 
     // =========================
-    // HELPER
+    // HELPERS
     // =========================
     const json = (data, status = 200) =>
       new Response(JSON.stringify(data), {
@@ -21,187 +22,181 @@ export default {
         headers: { ...cors, "Content-Type": "application/json" }
       });
 
-    const supabase = {
-      async query(path) {
-        const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
-          headers: {
-            apikey: env.SUPABASE_ANON_KEY,
-            Authorization: `Bearer ${env.SUPABASE_ANON_KEY}`
-          }
-        });
-        if (!res.ok) throw new Error("Supabase error");
-        return res.json();
-      }
+    const supabaseQuery = async (path) => {
+      const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
+        headers: {
+          apikey: env.SUPABASE_SERVICE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`
+        }
+      });
+      if (!res.ok) throw new Error("Supabase error");
+      return res.json();
     };
 
-    const checkVip = async (userId) => {
-      const u = await supabase.query(
-        `users?user_id=eq.${userId}&select=vip_status,vip_expired_date`
+    // =========================
+    // TOKEN UTILS
+    // =========================
+    const signToken = async (payload) => {
+      const data = JSON.stringify(payload);
+      const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(env.STREAM_SECRET),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
       );
-      if (!u.length) return false;
-      if (!u[0].vip_status) return false;
-      return new Date(u[0].vip_expired_date) > new Date();
+      const sig = await crypto.subtle.sign(
+        "HMAC",
+        key,
+        new TextEncoder().encode(data)
+      );
+      return btoa(data) + "." + btoa(String.fromCharCode(...new Uint8Array(sig)));
+    };
+
+    const verifyToken = async (token) => {
+      const [payloadB64, sigB64] = token.split(".");
+      if (!payloadB64 || !sigB64) return null;
+
+      const payload = JSON.parse(atob(payloadB64));
+      if (payload.exp < Date.now()) return null;
+
+      const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(env.STREAM_SECRET),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["verify"]
+      );
+
+      const valid = await crypto.subtle.verify(
+        "HMAC",
+        key,
+        Uint8Array.from(atob(sigB64), c => c.charCodeAt(0)),
+        new TextEncoder().encode(JSON.stringify(payload))
+      );
+
+      return valid ? payload : null;
     };
 
     // =========================
     // API: VIDEO METADATA
     // =========================
     if (url.pathname === "/api/video") {
-      const code = url.searchParams.get("code");
-      const userId = url.searchParams.get("user_id");
-
-      if (!code) return json({ error: "invalid code" }, 400);
-
-      const videos = await supabase.query(
-        `videos?deep_link_code=eq.${code}&select=video_id,title,description,category,thumbnail_url,created_at`
-      );
-
-      if (!videos.length) return json({ error: "not found" }, 404);
-
-      const video = videos[0];
-      let hasAccess = true;
-
-      if (video.category === "vip") {
-        if (!userId) hasAccess = false;
-        else hasAccess = await checkVip(userId);
-      }
-
-      return json({
-        ...video,
-        has_access: hasAccess,
-        stream_url: hasAccess
-          ? `https://mini-app.dramachinaharch.workers.dev/api/video/stream?code=${code}&user_id=${userId || ""}`
-          : null
-      });
-    }
-
-    // =========================
-    // API: VIDEO STREAM (AMAN)
-    // =========================
-if (url.pathname === "/api/video/stream") {
-  try {
-    const code = url.searchParams.get("code");
-    const userId = url.searchParams.get("user_id");
-
-    if (!code) {
-      return new Response("Forbidden", {
-        status: 403,
-        headers: cors
-      });
-    }
-
-    let videos;
-    try {
-      videos = await supabase.query(
-        `videos?deep_link_code=eq.${code}&select=video_path,category`
-      );
-    } catch (e) {
-      console.error("Supabase query failed:", e);
-      return new Response("Metadata error", {
-        status: 500,
-        headers: cors
-      });
-    }
-
-    if (!videos || !videos.length) {
-      return new Response("Not Found", {
-        status: 404,
-        headers: cors
-      });
-    }
-
-    const video = videos[0];
-
-    if (video.category === "vip") {
-      if (!userId) {
-        return new Response("Unauthorized", {
-          status: 401,
-          headers: cors
-        });
-      }
-
-      let ok = false;
       try {
-        ok = await checkVip(userId);
+        const code = url.searchParams.get("code");
+        const userId = url.searchParams.get("user_id");
+
+        if (!code) return json({ error: "invalid code" }, 400);
+
+        const videos = await supabaseQuery(
+          `videos?deep_link_code=eq.${code}&select=video_path,category,title,description`
+        );
+
+        if (!videos.length) return json({ error: "not found" }, 404);
+
+        const video = videos[0];
+
+        if (video.category === "vip") {
+          if (!userId) return json({ error: "VIP required" }, 403);
+
+          const users = await supabaseQuery(
+            `users?user_id=eq.${userId}&select=vip_status,vip_expired_date`
+          );
+
+          if (
+            !users.length ||
+            !users[0].vip_status ||
+            new Date(users[0].vip_expired_date) <= new Date()
+          ) {
+            return json({ error: "VIP expired" }, 403);
+          }
+        }
+
+        // 🔐 token 30 detik
+        const token = await signToken({
+          path: video.video_path,
+          exp: Date.now() + 30_000
+        });
+
+        return json({
+          title: video.title,
+          description: video.description,
+          stream_url: `https://mini-app.dramachinaharch.workers.dev/api/video/stream?token=${encodeURIComponent(token)}`
+        });
+
       } catch (e) {
-        console.error("VIP check failed:", e);
-        return new Response("VIP check failed", {
-          status: 500,
-          headers: cors
-        });
-      }
-
-      if (!ok) {
-        return new Response("Forbidden", {
-          status: 403,
-          headers: cors
-        });
+        console.error(e);
+        return json({ error: "server error" }, 500);
       }
     }
 
-    const rangeHeader = request.headers.get("Range");
+    // =========================
+    // API: VIDEO STREAM (NO DB)
+    // =========================
+    if (url.pathname === "/api/video/stream") {
+      try {
+        const token = url.searchParams.get("token");
+        if (!token) {
+          return new Response("Forbidden", { status: 403, headers: cors });
+        }
 
-    if (!env.R2_BUCKET) {
-      console.error("R2_BUCKET binding missing");
-      return new Response("Storage not configured", {
-        status: 500,
-        headers: cors
-      });
+        const payload = await verifyToken(token);
+        if (!payload) {
+          return new Response("Token invalid/expired", {
+            status: 403,
+            headers: cors
+          });
+        }
+
+        const range = request.headers.get("Range");
+        const object = await env.R2_BUCKET.get(payload.path, {
+          range: range ? parseRange(range) : undefined
+        });
+
+        if (!object) {
+          return new Response("Not Found", { status: 404, headers: cors });
+        }
+
+        const headers = new Headers(cors);
+        object.writeHttpMetadata(headers);
+        headers.set("Accept-Ranges", "bytes");
+        headers.set(
+          "Content-Type",
+          headers.get("Content-Type") || "video/mp4"
+        );
+
+        if (range && object.range) {
+          headers.set(
+            "Content-Range",
+            `bytes ${object.range.offset}-${object.range.end}/${object.size}`
+          );
+          return new Response(object.body, { status: 206, headers });
+        }
+
+        return new Response(object.body, { status: 200, headers });
+
+      } catch (e) {
+        console.error("Stream error:", e);
+        return new Response("Stream error", { status: 500, headers: cors });
+      }
     }
-
-    const object = await env.R2_BUCKET.get(video.video_path, {
-      range: rangeHeader ? parseRange(rangeHeader) : undefined
-    });
-
-    if (!object) {
-      return new Response("Video not found", {
-        status: 404,
-        headers: cors
-      });
-    }
-
-    const headers = new Headers(cors);
-    object.writeHttpMetadata(headers);
-    headers.set("Accept-Ranges", "bytes");
-
-    if (rangeHeader && object.range) {
-      headers.set(
-        "Content-Range",
-        `bytes ${object.range.offset}-${object.range.end}/${object.size}`
-      );
-
-      return new Response(object.body, {
-        status: 206,
-        headers
-      });
-    }
-
-    return new Response(object.body, {
-      status: 200,
-      headers
-    });
-
-  } catch (err) {
-    // ⛑️ LAST RESORT: never crash Worker
-    console.error("Fatal stream error:", err);
-    return new Response("Internal Stream Error", {
-      status: 500,
-      headers: cors
-    });
-  }
-}
 
     return json({ error: "Not Found" }, 404);
   }
 };
 
 // =========================
-// RANGE HELPERS
+// RANGE HELPER
 // =========================
 function parseRange(range) {
-  const [start, end] = range.replace(/bytes=/, "").split("-");
+  const m = range.match(/bytes=(\d+)-(\d*)/);
+  if (!m) return undefined;
+
+  const start = Number(m[1]);
+  const end = m[2] ? Number(m[2]) : undefined;
+
   return {
-    offset: Number(start),
-    length: end ? Number(end) - Number(start) + 1 : undefined
+    offset: start,
+    length: end ? end - start + 1 : undefined
   };
 }
