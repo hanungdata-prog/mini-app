@@ -869,7 +869,7 @@ class VideoPlayerApp {
             this.videoDescription.textContent = data.description;
         }
         
-        this.updateDebugInfo('status', 'VIP Required');
+        this.updateDebugInfo('status', 'VIP Dibutuhkan');
     }
     
     openVipPurchase() {
@@ -883,7 +883,7 @@ class VideoPlayerApp {
                 // window.open('https://t.me/drachin_harch_bot?start=vip', '_blank');
             } catch (error) {
                 console.error('Error opening bot:', error);
-                alert('Please return to the bot to purchase VIP membership');
+                alert('Silakan kembali ke bot untuk membeli VIP.');
             }
         } else {
             // Fallback: open bot link
