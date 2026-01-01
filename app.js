@@ -598,13 +598,13 @@ class VideoPlayerApp {
     // ========== VIDEO EVENT HANDLERS ==========
     
     handleVideoLoaded() {
-        this.videoDuration = this.videoPlayer.duration();
+        this.videoDuration = this.videoPlayer.duration;
         this.updateDurationDisplay();
     }
 
     handleVideoCanPlay() {
         this.loadingIndicator.style.display = 'none';
-        this.videoPlayer.volume(this.lastVolume);
+        this.videoPlayer.volume = this.lastVolume;
         if (this.volumeSlider) {
             this.volumeSlider.value = this.lastVolume;
         }
@@ -632,7 +632,7 @@ class VideoPlayerApp {
     
     handleTimeUpdate() {
         if (this.videoDuration && this.progressBar) {
-            const progressPercent = (this.videoPlayer.currentTime() / this.videoDuration) * 100;
+            const progressPercent = (this.videoPlayer.currentTime / this.videoDuration) * 100;
             this.progressBar.style.width = `${progressPercent}%`;
             this.updateCurrentTimeDisplay();
         }
@@ -647,25 +647,23 @@ class VideoPlayerApp {
     
     handleVideoError() {
         this.loadingIndicator.style.display = 'none';
-        const error = this.videoPlayer.error();
+        const error = this.videoPlayer.error;
         let errorMessage = 'Failed to load video. Please try again.';
 
         if (error) {
             switch (error.code) {
-                case 1: // MEDIA_ERR_ABORTED
+                case error.MEDIA_ERR_ABORTED:
                     errorMessage = 'Video playback was aborted.';
                     break;
-                case 2: // MEDIA_ERR_NETWORK
+                case error.MEDIA_ERR_NETWORK:
                     errorMessage = 'Network error occurred while loading video.';
                     break;
-                case 3: // MEDIA_ERR_DECODE
+                case error.MEDIA_ERR_DECODE:
                     errorMessage = 'Video decoding error.';
                     break;
-                case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+                case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
                     errorMessage = 'Video format not supported.';
                     break;
-                default:
-                    errorMessage = `Video error: ${error.message || 'Unknown error'}`;
             }
         }
 
@@ -680,9 +678,9 @@ class VideoPlayerApp {
     
     handleVolumeChange() {
         if (this.volumeSlider) {
-            this.volumeSlider.value = this.videoPlayer.volume();
+            this.volumeSlider.value = this.videoPlayer.volume;
         }
-        this.lastVolume = this.videoPlayer.volume();
+        this.lastVolume = this.videoPlayer.volume;
     }
     
     handleFullscreenChange() {
@@ -694,7 +692,7 @@ class VideoPlayerApp {
     togglePlayPause() {
         if (!this.videoPlayer) return;
 
-        if (this.videoPlayer.paused()) {
+        if (this.videoPlayer.paused) {
             this.videoPlayer.play()
                 .then(() => {
                     this.isVideoPlaying = true;
@@ -739,51 +737,51 @@ class VideoPlayerApp {
     
     rewindVideo() {
         if (!this.videoPlayer) return;
-        const currentTime = this.videoPlayer.currentTime();
-        this.videoPlayer.currentTime(Math.max(0, currentTime - 10));
+        const currentTime = this.videoPlayer.currentTime;
+        this.videoPlayer.currentTime = Math.max(0, currentTime - 10);
         this.showControls();
     }
 
     forwardVideo() {
         if (!this.videoPlayer) return;
-        const currentTime = this.videoPlayer.currentTime();
-        this.videoPlayer.currentTime(Math.min(
+        const currentTime = this.videoPlayer.currentTime;
+        this.videoPlayer.currentTime = Math.min(
             this.videoDuration,
             currentTime + 10
-        ));
+        );
         this.showControls();
     }
     
     toggleMute() {
         if (!this.videoPlayer) return;
-        const isMuted = this.videoPlayer.muted();
-        this.videoPlayer.muted(!isMuted);
+        const isMuted = this.videoPlayer.muted;
+        this.videoPlayer.muted = !isMuted;
         if (!isMuted) {
-            this.lastVolume = this.videoPlayer.volume();
-            this.videoPlayer.volume(0);
+            this.lastVolume = this.videoPlayer.volume;
+            this.videoPlayer.volume = 0;
         } else {
-            this.videoPlayer.volume(this.lastVolume);
+            this.videoPlayer.volume = this.lastVolume;
         }
         this.showControls();
     }
 
     increaseVolume() {
         if (!this.videoPlayer) return;
-        const currentVolume = this.videoPlayer.volume();
-        this.videoPlayer.volume(Math.min(1, currentVolume + 0.1));
+        const currentVolume = this.videoPlayer.volume;
+        this.videoPlayer.volume = Math.min(1, currentVolume + 0.1);
         this.showVolumeControl();
     }
 
     decreaseVolume() {
         if (!this.videoPlayer) return;
-        const currentVolume = this.videoPlayer.volume();
-        this.videoPlayer.volume(Math.max(0, currentVolume - 0.1));
+        const currentVolume = this.videoPlayer.volume;
+        this.videoPlayer.volume = Math.max(0, currentVolume - 0.1);
         this.showVolumeControl();
     }
     
     adjustVolume() {
         if (!this.videoPlayer || !this.volumeSlider) return;
-        this.videoPlayer.volume(this.volumeSlider.value);
+        this.videoPlayer.volume = this.volumeSlider.value;
         this.showVolumeControl();
     }
     
@@ -813,7 +811,7 @@ class VideoPlayerApp {
         if (!this.videoPlayer || !this.progressContainer) return;
         const rect = this.progressContainer.getBoundingClientRect();
         const pos = (e.clientX - rect.left) / rect.width;
-        this.videoPlayer.currentTime(pos * this.videoDuration);
+        this.videoPlayer.currentTime = pos * this.videoDuration;
         this.showControls();
     }
     
@@ -821,7 +819,7 @@ class VideoPlayerApp {
     
     updateCurrentTimeDisplay() {
         if (!this.currentTimeDisplay || !this.videoPlayer) return;
-        const currentTime = this.videoPlayer.currentTime();
+        const currentTime = this.videoPlayer.currentTime;
         const minutes = Math.floor(currentTime / 60);
         const seconds = Math.floor(currentTime % 60);
         this.currentTimeDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
