@@ -176,8 +176,8 @@ const supabaseQuery = async (path) => {
         }
 
         const headers = new Headers(cors);
-        object.writeHttpMetadata(headers);
         headers.set("Accept-Ranges", "bytes");
+        headers.set("Cache-Control", "no-store");
         headers.set(
           "Content-Type",
           headers.get("Content-Type") || "video/mp4"
