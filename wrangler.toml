@@ -4,7 +4,7 @@ compatibility_date = "2025-01-01"
 
 [vars]
 SUPABASE_URL = "https://wpjfojsfkcgppprvzwoh.supabase.co"
-SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwamZvanNma2NncHBwcnZ6d29oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTUwNDIsImV4cCI6MjA3MTMzMTA0Mn0.P877Kg2muBOMiqV7YxolL821gNKRo1vrgUPag_tdzwM"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwamZvanNma2NncHBwcnZ6d29oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTUwNDIsImV4cCI6MjA3MTMzMTA0Mn0.P877Kg2muBOMiqV7YxolL821gNKRo1vrgUPag_tdzwM"
 STREAM_SECRET = "harch-stream-secret-2025"
 
 [[r2_buckets]]
