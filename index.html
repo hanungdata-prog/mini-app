@@ -557,6 +557,63 @@
         input, textarea, select {
             font-size: 16px;
         }
+
+        /* Fallback mode styles */
+.fallback-mode .watermark {
+    background: rgba(255, 193, 7, 0.8);
+    color: #000;
+    border-color: rgba(255, 213, 79, 0.5);
+}
+
+.fallback-mode .header {
+    background: linear-gradient(180deg, rgba(255, 193, 7, 0.2) 0%, rgba(0,0,0,0.9) 100%);
+}
+
+/* Network status indicator */
+#networkStatus {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    z-index: 10000;
+    display: none;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transition: opacity 0.3s;
+}
+
+/* Loading animation for retry */
+.retry-loading {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+/* Offline indicator */
+.offline-indicator {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    background: rgba(231, 76, 60, 0.9);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 11px;
+    z-index: 10001;
+    display: none;
+    backdrop-filter: blur(5px);
+}
     </style>
 </head>
 <body>
