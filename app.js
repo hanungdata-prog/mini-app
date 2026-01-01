@@ -9,7 +9,11 @@ class VideoPlayerApp {
         this.initializeElements();
         
         // Get deep link code
-        this.deepLinkCode = this.getUrlParameter('code');
+        // Get deep link code (URL ?code= OR Telegram startapp)
+    this.deepLinkCode =
+        this.getUrlParameter('code') ||
+        this.getTelegramStartParam();
+
         
         // Initialize player
         if (!this.deepLinkCode) {
@@ -34,6 +38,15 @@ class VideoPlayerApp {
     getUrlParameter(name) {
         const urlParams = new URLSearchParams(window.location.search);
         return urlParams.get(name);
+    }
+
+    getTelegramStartParam() {
+        if (window.Telegram && window.Telegram.WebApp) {
+            const tg = window.Telegram.WebApp;
+            tg.ready();
+            return tg.initDataUnsafe?.start_param || null;
+        }
+        return null;
     }
     
     // Setup security measures
