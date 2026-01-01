@@ -441,36 +441,31 @@ class VideoPlayerApp {
     }
     
     setVideoSource(videoUrl) {
-        if (!this.videoPlayer) {
-            console.error('Video player element not found');
-            return;
-        }
-        
-        // Validate URL
-        try {
-            new URL(videoUrl);
-        } catch (error) {
-            console.error('Invalid video URL');
-            this.showError('Invalid video URL. Please contact support.');
-            return;
-        }
-        
-        // Set source directly - no blob needed for streaming
-        this.videoPlayer.src = videoUrl;
-        
-        // Security attributes
-        this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
-        this.videoPlayer.disableRemotePlayback = true;
-        this.videoPlayer.setAttribute('crossorigin', 'anonymous');
-        this.videoPlayer.setAttribute('preload', 'metadata');
-        this.videoPlayer.setAttribute('playsinline', 'true');
-        this.videoPlayer.setAttribute('webkit-playsinline', 'true');
-        
-        this.videoPlayer.controls = false;
-        
-        this.videoPlayer.load();
-    }
-    
+      if (!this.videoPlayer) return;
+
+      // ✅ FIX: support relative URL
+      let finalUrl;
+      try {
+        finalUrl = videoUrl.startsWith('http')
+          ? videoUrl
+          : new URL(videoUrl, window.location.origin).href;
+      } catch (e) {
+        console.error('Invalid video URL:', videoUrl);
+        this.showError('Invalid video stream URL.');
+        return;
+      }
+
+      this.videoPlayer.src = finalUrl;
+
+      this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
+      this.videoPlayer.disableRemotePlayback = true;
+      this.videoPlayer.setAttribute('preload', 'metadata');
+      this.videoPlayer.setAttribute('playsinline', 'true');
+      this.videoPlayer.setAttribute('webkit-playsinline', 'true');
+
+      this.videoPlayer.controls = false;
+      this.videoPlayer.load();
+    }  
     // ========== EVENT LISTENERS (abbreviated for space) ==========
     
     setupEventListeners() {
