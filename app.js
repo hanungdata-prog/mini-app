@@ -485,17 +485,6 @@ setVideoSource(videoUrl) {
     }, { once: true });
   }, 100);
 }
-
-// ✅ Tambahkan fungsi ini jika belum ada
-handleVideoError() {
-  this.loadingIndicator.style.display = 'none';
-  const error = this.videoPlayer.error;
-  let errorMessage = 'Failed to load video. Please try again.';
-  
-  }
-  
-  this.showError(errorMessage);
-}
     // ========== EVENT LISTENERS (abbreviated for space) ==========
     
     setupEventListeners() {
