@@ -1,10 +1,11 @@
 name = "mini-app"
 main = "video-api-worker.js"
-compatibility_date = "2025-01-01"
+compatibility_date = "2023-01-01"
 
 [vars]
 SUPABASE_URL = "https://wpjfojsfkcgppprvzwoh.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwamZvanNma2NncHBwcnZ6d29oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTUwNDIsImV4cCI6MjA3MTMzMTA0Mn0.P877Kg2muBOMiqV7YxolL821gNKRo1vrgUPag_tdzwM"
+SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwamZvanNma2NncHBwcnZ6d29oIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NTc1NTA0MiwiZXhwIjoyMDcxMzMxMDQyfQ.rIJPgs_yIsjXZzeVyHbe6N2nk2MLDc5wJO1UumKVGwE"
+STREAM_SECRET = "harch-stream-2026-9XrK2QpL@D!E0"
 
 [[r2_buckets]]
 binding = "R2_BUCKET"
