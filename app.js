@@ -177,7 +177,7 @@ class VideoPlayerApp {
             
             // Use absolute URL to Cloudflare Workers
             const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
-            const fullUrl = `${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}${this.userId ? '&user_id=' + this.userId : ''}`;
+            const fullUrl =`${apiUrl}?code=${this.deepLinkCode}` + (this.userId ? `&user_id=${this.userId}` : '');
             
             this.updateDebugInfo('api', 'Fetching...');
             this.updateDebugInfo('status', 'Loading API...');
@@ -278,45 +278,53 @@ class VideoPlayerApp {
         document.title = title + ' - Harch Short';
     }
     
-    setVideoSource(videoUrl) {
-        if (!this.videoPlayer) return;
+setVideoSource(videoUrl) {
+    if (!this.videoPlayer) return;
 
-        // Handle stream URL from API
-        let finalUrl;
-        try {
-            if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
-                finalUrl = videoUrl;
-            } else if (videoUrl.startsWith('/')) {
-                // Relative URL - prepend Cloudflare Workers domain
-                finalUrl = 'https://mini-app.dramachinaharch.workers.dev' + videoUrl;
-            } else {
-                // Just a path - shouldn't happen but handle it
-                finalUrl = 'https://mini-app.dramachinaharch.workers.dev/' + videoUrl;
-            }
-        } catch (e) {
-            console.error('Invalid video URL:', videoUrl);
-            this.showError('Invalid video stream URL.');
-            return;
+    let finalUrl;
+    try {
+        const cleanUrl = String(videoUrl).trim();
+
+        if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+            finalUrl = cleanUrl;
+        } else if (cleanUrl.startsWith('/')) {
+            finalUrl = 'https://mini-app.dramachinaharch.workers.dev' + cleanUrl;
+        } else {
+            finalUrl = 'https://mini-app.dramachinaharch.workers.dev/' + cleanUrl;
         }
-
-        console.log('Setting video source:', finalUrl);
-
-        // Set video source
-        this.videoPlayer.src = finalUrl;
-        
-        // Set attributes for better Telegram compatibility
-        this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
-        this.videoPlayer.setAttribute('disableRemotePlayback', 'true');
-        this.videoPlayer.setAttribute('preload', 'auto');
-        this.videoPlayer.setAttribute('playsinline', 'true');
-        this.videoPlayer.setAttribute('webkit-playsinline', 'true');
-        this.videoPlayer.setAttribute('x-webkit-airplay', 'deny');
-        // Remove crossorigin for Telegram compatibility
-        this.videoPlayer.removeAttribute('crossorigin');
-        
-        // Force video to load
-        this.videoPlayer.load();
+    } catch (e) {
+        console.error('Invalid video URL:', videoUrl);
+        this.showError('Invalid video stream URL.');
+        return;
     }
+
+    console.log('Setting video source:', finalUrl);
+
+    const video = this.videoPlayer;
+
+    // 🔒 RESET dulu (penting untuk Telegram)
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+
+    // 🎯 Attribute yang paling stabil di Telegram
+    video.setAttribute('preload', 'metadata');
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    video.setAttribute('controlsList', 'nodownload noplaybackrate');
+    video.setAttribute('disableRemotePlayback', 'true');
+    video.setAttribute('x-webkit-airplay', 'deny');
+
+    // ❌ Jangan pakai crossorigin di Telegram WebView
+    video.removeAttribute('crossorigin');
+
+    // ⏱️ Delay kecil supaya WebView siap
+    setTimeout(() => {
+        video.src = finalUrl;
+        video.load();
+    }, 50);
+}
+
     
     setupEventListeners() {
         if (!this.videoPlayer) return;
