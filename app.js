@@ -1,4 +1,4 @@
-// app.js - Video Player for Telegram Mini App (Direct R2 Access)
+// app.js - Video Player for Telegram Mini App (Fixed for tgWebAppStartParam)
 
 class VideoPlayerApp {
     constructor() {
@@ -11,16 +11,16 @@ class VideoPlayerApp {
         // Debug URL information
         this.debugUrlInfo();
         
-        // Get video code from URL - PRIORITIZE start_param
+        // Get video code from URL
         this.videoCode = this.extractVideoCode();
         
         // Update debug UI
         this.updateDebugInfo('code', this.videoCode || 'NO CODE');
-        this.updateDebugInfo('telegram', 'DIRECT R2');
+        this.updateDebugInfo('telegram', 'TELEGRAM DIRECT');
         this.updateDebugInfo('status', 'Initializing...');
         
         // Log extracted code
-        console.log('Final video code extracted:', this.videoCode);
+        console.log('🎯 Final video code extracted:', this.videoCode);
         
         // Initialize player
         if (!this.videoCode || !this.isValidVideoCode(this.videoCode)) {
@@ -32,7 +32,7 @@ class VideoPlayerApp {
             this.updateDebugInfo('status', 'INVALID CODE');
             document.getElementById('loadingIndicator').style.display = 'none';
             
-            // Show available parameters for debugging
+            // Show debug info
             this.showDebugParameters();
         } else {
             this.updateDebugInfo('status', 'Loading video...');
@@ -51,70 +51,81 @@ class VideoPlayerApp {
         
         // Initialize with controls hidden
         this.hideControls();
-        
-        // Setup dev tools detection (optional)
-        this.setupDevToolsDetection();
     }
     
     // ========== URL DEBUGGING ==========
     
     debugUrlInfo() {
         console.log('=== URL DEBUG INFO ===');
-        console.log('Full URL:', window.location.href);
-        console.log('Hostname:', window.location.hostname);
-        console.log('Pathname:', window.location.pathname);
-        console.log('Search:', window.location.search);
-        console.log('Hash:', window.location.hash);
+        console.log('📍 Full URL:', window.location.href);
+        console.log('🏠 Hostname:', window.location.hostname);
+        console.log('📁 Pathname:', window.location.pathname);
+        console.log('🔍 Search:', window.location.search);
+        console.log('🔗 Hash:', window.location.hash ? window.location.hash.substring(0, 100) + '...' : '(empty)');
         
-        // Parse all URL parameters
+        // Parse query parameters
         const urlParams = new URLSearchParams(window.location.search);
-        console.log('URL Parameters:');
+        console.log('📋 Query Parameters:');
         
+        let hasTelegramParam = false;
         for (const [key, value] of urlParams.entries()) {
-            console.log(`  ${key}:`, value.length > 100 ? value.substring(0, 100) + '...' : value);
-        }
-        
-        // Check for Telegram specific parameters
-        if (urlParams.has('tgWebAppData')) {
-            console.log('Telegram WebApp Data detected');
-            try {
-                const tgData = decodeURIComponent(urlParams.get('tgWebAppData'));
-                const tgParams = new URLSearchParams(tgData);
-                console.log('Parsed Telegram Data:');
-                for (const [key, value] of tgParams.entries()) {
-                    if (key === 'start_param') {
-                        console.log(`  🎯 ${key}: ${value}`);
-                    } else {
-                        console.log(`  ${key}:`, value.length > 50 ? value.substring(0, 50) + '...' : value);
-                    }
-                }
-            } catch (e) {
-                console.error('Error parsing tgWebAppData:', e);
+            console.log(`   ${key}: ${value}`);
+            if (key.includes('tgWebApp') || key.includes('start')) {
+                hasTelegramParam = true;
             }
         }
         
+        // Parse hash parameters
+        if (window.location.hash) {
+            const hash = window.location.hash.substring(1);
+            console.log('🗝️ Hash Content (first 200 chars):', hash.substring(0, 200) + (hash.length > 200 ? '...' : ''));
+            
+            try {
+                const hashParams = new URLSearchParams(hash);
+                console.log('📋 Hash Parameters:');
+                
+                for (const [key, value] of hashParams.entries()) {
+                    console.log(`   ${key}: ${value.length > 50 ? value.substring(0, 50) + '...' : value}`);
+                    
+                    if (key === 'tgWebAppData') {
+                        hasTelegramParam = true;
+                        console.log('   🔐 Parsing tgWebAppData...');
+                        try {
+                            const decoded = decodeURIComponent(value);
+                            const tgParams = new URLSearchParams(decoded);
+                            const startParam = tgParams.get('start_param');
+                            if (startParam) {
+                                console.log(`   🎯 Found start_param in tgWebAppData: ${startParam}`);
+                            }
+                        } catch (e) {
+                            console.log('   ❌ Error parsing tgWebAppData:', e.message);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log('   ❌ Cannot parse hash as query string');
+            }
+        }
+        
+        console.log(`📱 Telegram detected: ${hasTelegramParam ? 'YES' : 'NO'}`);
         console.log('=====================');
     }
     
     showDebugParameters() {
         const urlParams = new URLSearchParams(window.location.search);
-        let debugHTML = '<div style="font-size: 12px; color: #888; margin-top: 10px;">';
-        debugHTML += '<strong>Debug Info:</strong><br>';
+        let debugHTML = '<div style="font-size: 12px; color: #888; margin-top: 15px; text-align: left; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px;">';
+        debugHTML += '<strong>🔍 Debug Info:</strong><br>';
         
+        // Show tgWebAppStartParam if exists
+        const tgStartParam = urlParams.get('tgWebAppStartParam');
+        if (tgStartParam) {
+            debugHTML += `tgWebAppStartParam: <code style="color: #4CAF50;">${tgStartParam}</code><br>`;
+        }
+        
+        // Show other parameters
         for (const [key, value] of urlParams.entries()) {
-            if (key === 'tgWebAppData') {
-                try {
-                    const tgData = decodeURIComponent(value);
-                    const tgParams = new URLSearchParams(tgData);
-                    const startParam = tgParams.get('start_param');
-                    if (startParam) {
-                        debugHTML += `start_param: <code>${startParam}</code><br>`;
-                    }
-                } catch (e) {
-                    debugHTML += `${key}: <code>${value.substring(0, 50)}...</code><br>`;
-                }
-            } else if (key === 'start_param') {
-                debugHTML += `${key}: <code>${value}</code><br>`;
+            if (key !== 'tgWebAppStartParam') {
+                debugHTML += `${key}: <code>${value.substring(0, 30)}${value.length > 30 ? '...' : ''}</code><br>`;
             }
         }
         
@@ -128,82 +139,97 @@ class VideoPlayerApp {
     // ========== VIDEO CODE EXTRACTION ==========
     
     extractVideoCode() {
-        // Priority 1: Direct start_param parameter
-        const directStartParam = this.getStartParamDirect();
-        if (directStartParam) {
-            console.log('Found direct start_param:', directStartParam);
-            return directStartParam;
-        }
+        console.log('🔍 Extracting video code...');
         
-        // Priority 2: Parse tgWebAppData for start_param
-        const tgStartParam = this.getStartParamFromTelegram();
+        // Method 1: Direct tgWebAppStartParam parameter
+        const tgStartParam = this.getTgWebAppStartParam();
         if (tgStartParam) {
-            console.log('Found start_param in Telegram data:', tgStartParam);
+            console.log('✅ Found tgWebAppStartParam:', tgStartParam);
             return tgStartParam;
         }
         
-        // Priority 3: Standard 'code' parameter
+        // Method 2: Parse hash for start_param
+        const hashStartParam = this.getStartParamFromHash();
+        if (hashStartParam) {
+            console.log('✅ Found start_param in hash:', hashStartParam);
+            return hashStartParam;
+        }
+        
+        // Method 3: Standard 'code' parameter
         const codeParam = this.getCodeParam();
         if (codeParam) {
-            console.log('Found code parameter:', codeParam);
+            console.log('✅ Found code parameter:', codeParam);
             return codeParam;
         }
         
-        // Priority 4: Try from hash/fragment
-        const hashParam = this.getCodeFromHash();
+        // Method 4: From hash (simple)
+        const hashParam = this.getSimpleHashCode();
         if (hashParam) {
-            console.log('Found code in hash:', hashParam);
+            console.log('✅ Found code in hash:', hashParam);
             return hashParam;
         }
         
-        // Priority 5: Last resort - from path
+        // Method 5: From path
         const pathParam = this.getCodeFromPath();
         if (pathParam) {
-            console.log('Found code in path:', pathParam);
+            console.log('✅ Found code in path:', pathParam);
             return pathParam;
         }
         
-        console.log('No video code found in URL');
+        console.log('❌ No video code found');
         return null;
     }
     
-    getStartParamDirect() {
+    getTgWebAppStartParam() {
         try {
             const urlParams = new URLSearchParams(window.location.search);
-            const startParam = urlParams.get('start_param');
-            return this.cleanCode(startParam);
+            const startParam = urlParams.get('tgWebAppStartParam');
+            
+            if (startParam) {
+                console.log('📱 tgWebAppStartParam found:', startParam);
+                return this.cleanCode(startParam);
+            }
         } catch (e) {
-            return null;
+            console.error('Error getting tgWebAppStartParam:', e);
         }
+        
+        return null;
     }
     
-    getStartParamFromTelegram() {
+    getStartParamFromHash() {
+        if (!window.location.hash) return null;
+        
         try {
-            const urlParams = new URLSearchParams(window.location.search);
-            const tgWebAppData = urlParams.get('tgWebAppData');
+            const hash = window.location.hash.substring(1);
+            const hashParams = new URLSearchParams(hash);
             
+            // Get start_param directly from hash
+            const startParam = hashParams.get('start_param');
+            if (startParam) {
+                console.log('🔗 start_param found in hash:', startParam);
+                return this.cleanCode(startParam);
+            }
+            
+            // Try parsing tgWebAppData from hash
+            const tgWebAppData = hashParams.get('tgWebAppData');
             if (tgWebAppData) {
-                console.log('Parsing tgWebAppData...');
-                // Decode URL encoded data
-                const decodedData = decodeURIComponent(tgWebAppData);
-                
-                // Parse as query string
-                const params = new URLSearchParams(decodedData);
-                
-                // Look for start_param
-                const startParam = params.get('start_param');
-                if (startParam) {
-                    return this.cleanCode(startParam);
-                }
-                
-                // Also check for user query
-                const query = params.get('query');
-                if (query && this.isValidVideoCode(query)) {
-                    return this.cleanCode(query);
+                console.log('🔐 tgWebAppData found in hash, parsing...');
+                try {
+                    const decodedData = decodeURIComponent(tgWebAppData);
+                    const tgParams = new URLSearchParams(decodedData);
+                    const startParamFromData = tgParams.get('start_param');
+                    
+                    if (startParamFromData) {
+                        console.log('🎯 start_param found in tgWebAppData:', startParamFromData);
+                        return this.cleanCode(startParamFromData);
+                    }
+                } catch (parseError) {
+                    console.error('Error parsing tgWebAppData:', parseError);
                 }
             }
-        } catch (error) {
-            console.error('Error parsing Telegram data:', error);
+            
+        } catch (e) {
+            console.error('Error getting start param from hash:', e);
         }
         
         return null;
@@ -219,33 +245,26 @@ class VideoPlayerApp {
             
             return this.cleanCode(code);
         } catch (e) {
+            console.error('Error getting code param:', e);
             return null;
         }
     }
     
-    getCodeFromHash() {
+    getSimpleHashCode() {
         if (!window.location.hash) return null;
         
         try {
             const hash = window.location.hash.substring(1);
             
-            // Try as direct code
-            const directCode = this.cleanCode(hash.split('?')[0]);
-            if (directCode && this.isValidVideoCode(directCode)) {
-                return directCode;
-            }
-            
-            // Try parsing hash as query string
-            if (hash.includes('?')) {
-                const hashParams = new URLSearchParams(hash.split('?')[1]);
-                const code = hashParams.get('start_param') || 
-                            hashParams.get('code') || 
-                            hashParams.get('v');
-                
-                return this.cleanCode(code);
+            // If hash is simple (not a query string), it might be the code
+            if (!hash.includes('=') && !hash.includes('&') && !hash.includes('?')) {
+                const cleanHash = this.cleanCode(hash);
+                if (cleanHash && this.isValidVideoCode(cleanHash)) {
+                    return cleanHash;
+                }
             }
         } catch (e) {
-            console.error('Error getting code from hash:', e);
+            console.error('Error getting simple hash code:', e);
         }
         
         return null;
@@ -257,9 +276,9 @@ class VideoPlayerApp {
             const segments = path.split('/').filter(s => s.trim());
             
             // Skip common segments
-            const skipSegments = ['index.html', 'mini-app', 'worker', 'api'];
+            const skipSegments = ['index.html', 'mini-app', 'worker', 'api', ''];
             
-            for (const segment of segments.reverse()) { // Check from end
+            for (const segment of segments.reverse()) {
                 if (!skipSegments.includes(segment)) {
                     const cleaned = this.cleanCode(segment);
                     if (cleaned && this.isValidVideoCode(cleaned)) {
@@ -294,12 +313,19 @@ class VideoPlayerApp {
         
         // Length check: 3 to 50 characters
         if (code.length < 3 || code.length > 50) {
+            console.log(`Code length invalid: ${code.length} characters`);
             return false;
         }
         
         // Character check: only alphanumeric, dash, underscore
         const regex = /^[a-zA-Z0-9-_]+$/;
-        return regex.test(code);
+        const isValid = regex.test(code);
+        
+        if (!isValid) {
+            console.log(`Code contains invalid characters: ${code}`);
+        }
+        
+        return isValid;
     }
     
     // ========== SECURITY MEASURES ==========
@@ -339,38 +365,6 @@ class VideoPlayerApp {
             e.preventDefault();
             return false;
         });
-        
-        // Disable screenshot on some devices
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'PrintScreen') {
-                navigator.clipboard.writeText('');
-                console.log('Screenshot prevented');
-            }
-        });
-        
-        // Disable DevTools shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'F12' || 
-                (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
-                (e.ctrlKey && e.key === 'U')) {
-                e.preventDefault();
-                return false;
-            }
-        });
-    }
-    
-    setupDevToolsDetection() {
-        // Simple devtools detection (optional)
-        const threshold = 160;
-        
-        const detectDevTools = () => {
-            if (window.outerWidth - window.innerWidth > threshold || 
-                window.outerHeight - window.innerHeight > threshold) {
-                console.log('%c⚠️ DevTools detected', 'color: orange; font-size: 14px;');
-            }
-        };
-        
-        setInterval(detectDevTools, 5000);
     }
     
     // ========== ELEMENT INITIALIZATION ==========
@@ -391,7 +385,6 @@ class VideoPlayerApp {
         this.rewindButton = document.getElementById('rewindButton');
         this.forwardButton = document.getElementById('forwardButton');
         this.retryButton = document.getElementById('retryButton');
-        this.backButton = document.querySelector('.back-btn');
         
         this.progressBar = document.getElementById('progressBar');
         this.progressContainer = document.getElementById('progressContainer');
@@ -401,17 +394,6 @@ class VideoPlayerApp {
         this.volumeSlider = document.getElementById('volumeSlider');
         this.volumeContainer = document.getElementById('volumeContainer');
         
-        // Setup back button if exists
-        if (this.backButton) {
-            this.backButton.addEventListener('click', () => {
-                if (window.history.length > 1) {
-                    window.history.back();
-                } else {
-                    window.close();
-                }
-            });
-        }
-        
         this.addVideoSecurity();
     }
     
@@ -420,18 +402,6 @@ class VideoPlayerApp {
         
         // Prevent video context menu
         this.videoPlayer.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            return false;
-        });
-        
-        // Prevent video selection
-        this.videoPlayer.addEventListener('selectstart', (e) => {
-            e.preventDefault();
-            return false;
-        });
-        
-        // Disable drag
-        this.videoPlayer.addEventListener('dragstart', (e) => {
             e.preventDefault();
             return false;
         });
@@ -452,16 +422,16 @@ class VideoPlayerApp {
                 throw new Error('No video code provided');
             }
             
-            console.log(`Initializing player with code: ${this.videoCode}`);
+            console.log(`🚀 Initializing player with code: ${this.videoCode}`);
             
             // Direct API call to Worker
             const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
             const fullUrl = `${apiUrl}?code=${encodeURIComponent(this.videoCode)}`;
             
             this.updateDebugInfo('api', 'Fetching...');
-            this.updateDebugInfo('status', 'Loading video metadata...');
+            this.updateDebugInfo('status', 'Loading video...');
             
-            console.log(`Fetching from: ${fullUrl}`);
+            console.log(`📡 Fetching from: ${fullUrl}`);
             
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -478,7 +448,7 @@ class VideoPlayerApp {
             clearTimeout(timeoutId);
             
             this.updateDebugInfo('api', `Status: ${response.status}`);
-            console.log(`API Response: ${response.status} ${response.statusText}`);
+            console.log(`📊 API Response: ${response.status} ${response.statusText}`);
             
             if (!response.ok) {
                 let errorData = {};
@@ -489,12 +459,12 @@ class VideoPlayerApp {
                     errorData = { error: 'Failed to parse error response' };
                 }
                 
-                console.error('API error details:', errorData);
+                console.error('❌ API error:', errorData);
                 
                 if (response.status === 404) {
                     throw new Error('Video not found. Please check your video code.');
                 } else if (response.status === 403) {
-                    if (errorData.error === 'VIP required' || errorData.error === 'VIP expired') {
+                    if (errorData.error === 'VIP required') {
                         this.showVipRequiredError(errorData);
                         return;
                     }
@@ -502,10 +472,6 @@ class VideoPlayerApp {
                 } else if (response.status === 400) {
                     throw new Error(errorData.message || 'Invalid request.');
                 } else if (response.status === 500) {
-                    // Check for specific database errors
-                    if (errorData.message && errorData.message.includes('database')) {
-                        throw new Error('Database connection error. Please try again later.');
-                    }
                     throw new Error('Server error. Please try again.');
                 } else {
                     throw new Error(`Error ${response.status}: Failed to load video.`);
@@ -513,7 +479,7 @@ class VideoPlayerApp {
             }
             
             const data = await response.json();
-            console.log('Video data received:', data);
+            console.log('✅ Video data received:', data);
             
             this.updateDebugInfo('api', 'SUCCESS');
             
@@ -550,7 +516,7 @@ class VideoPlayerApp {
             this.retryCount = 0;
             
         } catch (error) {
-            console.error('Error in initializePlayer:', error);
+            console.error('❌ Error in initializePlayer:', error);
             
             this.updateDebugInfo('api', 'FAILED');
             this.updateDebugInfo('status', `Error: ${error.message}`);
@@ -592,27 +558,10 @@ class VideoPlayerApp {
     setVideoSource(videoUrl) {
         if (!this.videoPlayer) return;
 
-        console.log(`Setting video source: ${videoUrl}`);
+        console.log(`🎬 Setting video source: ${videoUrl}`);
         
-        // Validate and format URL
-        let finalUrl;
-        try {
-            if (videoUrl.startsWith('http')) {
-                finalUrl = videoUrl;
-            } else if (videoUrl.startsWith('/')) {
-                finalUrl = new URL(videoUrl, window.location.origin).href;
-            } else {
-                // Assume it's a full URL
-                finalUrl = videoUrl;
-            }
-        } catch (e) {
-            console.error('Invalid video URL:', e);
-            this.showError('Invalid video URL format.');
-            return;
-        }
-
         // Set video source
-        this.videoPlayer.src = finalUrl;
+        this.videoPlayer.src = videoUrl;
 
         // Security and playback attributes
         this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
@@ -627,7 +576,7 @@ class VideoPlayerApp {
         // Load the video
         this.videoPlayer.load();
         
-        console.log('Video source set successfully');
+        console.log('✅ Video source set successfully');
     }
     
     // ========== EVENT LISTENERS ==========
@@ -706,15 +655,10 @@ class VideoPlayerApp {
             });
         }
         
-        // Fullscreen change listeners
-        document.addEventListener('fullscreenchange', this.handleFullscreenChange.bind(this));
-        document.addEventListener('webkitfullscreenchange', this.handleFullscreenChange.bind(this));
-        document.addEventListener('mozfullscreenchange', this.handleFullscreenChange.bind(this));
-        
         // Setup keyboard shortcuts
         this.setupKeyboardShortcuts();
         
-        console.log('Event listeners setup complete');
+        console.log('✅ Event listeners setup complete');
     }
     
     setupKeyboardShortcuts() {
@@ -751,24 +695,6 @@ class VideoPlayerApp {
                     this.showControls();
                     e.preventDefault();
                     break;
-                case 'arrowup':
-                    this.increaseVolume();
-                    this.showControls();
-                    e.preventDefault();
-                    break;
-                case 'arrowdown':
-                    this.decreaseVolume();
-                    this.showControls();
-                    e.preventDefault();
-                    break;
-                case '0':
-                    // Go to beginning
-                    if (this.videoPlayer) {
-                        this.videoPlayer.currentTime = 0;
-                        this.showControls();
-                    }
-                    e.preventDefault();
-                    break;
             }
         });
     }
@@ -778,7 +704,7 @@ class VideoPlayerApp {
     handleVideoLoaded() {
         this.videoDuration = this.videoPlayer.duration || 0;
         this.updateDurationDisplay();
-        console.log('Video loaded, duration:', this.formatTime(this.videoDuration));
+        console.log('📊 Video loaded, duration:', this.formatTime(this.videoDuration));
     }
     
     handleVideoCanPlay() {
@@ -798,7 +724,7 @@ class VideoPlayerApp {
             }
         }, 2000);
         
-        console.log('Video can play');
+        console.log('▶️ Video can play');
     }
     
     handleVideoPlaying() {
@@ -810,7 +736,7 @@ class VideoPlayerApp {
         this.loadingIndicator.style.display = 'none';
         this.hideControlsAfterDelay();
         
-        console.log('Video playing');
+        console.log('🎥 Video playing');
     }
     
     handleVideoPause() {
@@ -819,7 +745,7 @@ class VideoPlayerApp {
         if (this.playIcon) this.playIcon.style.display = 'block';
         if (this.pauseIcon) this.pauseIcon.style.display = 'none';
         
-        console.log('Video paused');
+        console.log('⏸️ Video paused');
     }
     
     handleTimeUpdate() {
@@ -838,7 +764,7 @@ class VideoPlayerApp {
         
         this.showControls();
         
-        console.log('Video ended');
+        console.log('🏁 Video ended');
     }
     
     handleVideoError() {
@@ -847,7 +773,7 @@ class VideoPlayerApp {
         let errorMessage = 'Video playback error.';
         
         if (error) {
-            console.error('Video error:', error.code, error.message);
+            console.error('❌ Video error:', error.code, error.message);
             
             switch (error.code) {
                 case 1: // MEDIA_ERR_ABORTED
@@ -881,10 +807,6 @@ class VideoPlayerApp {
         this.lastVolume = this.videoPlayer.volume;
     }
     
-    handleFullscreenChange() {
-        // Can add fullscreen-specific UI changes here
-    }
-    
     // ========== CONTROL FUNCTIONS ==========
     
     togglePlayPause() {
@@ -898,7 +820,7 @@ class VideoPlayerApp {
                     if (this.pauseIcon) this.pauseIcon.style.display = 'block';
                 })
                 .catch(error => {
-                    console.error('Play error:', error);
+                    console.error('❌ Play error:', error);
                     this.showError('Cannot play video.');
                 });
         } else {
@@ -995,7 +917,7 @@ class VideoPlayerApp {
         }
         
         this.retryCount++;
-        console.log(`Retry attempt ${this.retryCount} of ${this.maxRetries}`);
+        console.log(`🔄 Retry attempt ${this.retryCount} of ${this.maxRetries}`);
         
         this.errorMessage.style.display = 'none';
         this.loadingIndicator.style.display = 'flex';
@@ -1046,7 +968,7 @@ class VideoPlayerApp {
         
         this.loadingIndicator.style.display = 'none';
         
-        console.error('Error shown:', message);
+        console.error('❌ Error shown:', message);
     }
     
     showVipRequiredError(data) {
@@ -1073,16 +995,10 @@ class VideoPlayerApp {
         
         errorContainer.style.display = 'block';
         
-        // Update title if available
-        if (data.title) {
-            this.overlayTitle.textContent = data.title + ' 👑';
-        }
-        
         this.updateDebugInfo('status', 'VIP Required');
     }
     
     openVipPurchase() {
-        // Redirect to VIP purchase
         window.open('https://t.me/drachin_harch_bot?start=vip', '_blank');
     }
     
@@ -1132,27 +1048,25 @@ class VideoPlayerApp {
     // ========== CLEANUP ==========
     
     destroy() {
-        // Cleanup video source
         if (this.videoPlayer) {
             this.videoPlayer.pause();
             this.videoPlayer.src = '';
             this.videoPlayer.load();
         }
         
-        // Clear timeouts
         clearTimeout(this.controlsTimeout);
         
         if (this.volumeContainer && this.volumeContainer.timeout) {
             clearTimeout(this.volumeContainer.timeout);
         }
         
-        console.log('Player destroyed');
+        console.log('🧹 Player destroyed');
     }
 }
 
 // Initialize the app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, initializing VideoPlayerApp...');
+    console.log('🚀 DOM loaded, initializing VideoPlayerApp...');
     
     // Create global instance
     window.videoPlayerApp = new VideoPlayerApp();
@@ -1161,7 +1075,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('orientationchange', () => {
         setTimeout(() => {
             document.body.style.height = '100vh';
-            document.body.offsetHeight; // Trigger reflow
+            document.body.offsetHeight;
         }, 100);
     });
     
@@ -1172,27 +1086,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Watermark protection
-    const watermark = document.querySelector('.watermark');
-    if (watermark) {
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                mutation.removedNodes.forEach((node) => {
-                    if (node.classList && node.classList.contains('watermark')) {
-                        console.warn('Watermark removed, reloading...');
-                        setTimeout(() => location.reload(), 1000);
-                    }
-                });
-            });
-        });
-        
-        observer.observe(watermark.parentNode, { childList: true });
-    }
-    
     // Log initialization complete
     setTimeout(() => {
-        console.log('🎬 VideoPlayerApp initialized');
-        console.log('📝 Video Code:', window.videoPlayerApp.videoCode);
+        console.log('✅ VideoPlayerApp initialized');
+        console.log('🎯 Video Code:', window.videoPlayerApp.videoCode);
     }, 100);
 });
 
@@ -1207,13 +1104,11 @@ window.debugPlayer = function() {
         console.log('Volume:', window.videoPlayerApp.videoPlayer?.volume);
         console.log('Metadata:', window.videoPlayerApp.videoMetadata);
         console.log('========================');
-    } else {
-        console.log('Player not initialized');
     }
 };
 
 // Emergency test function
 window.testVideo = function(code = 'TEST123') {
-    console.log('Testing with code:', code);
+    console.log('🧪 Testing with code:', code);
     window.location.search = `?code=${code}`;
 };
