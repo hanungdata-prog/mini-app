@@ -11,11 +11,23 @@ class VideoPlayerApp {
         // Get deep link code (URL ?code= OR Telegram startapp)
         this.deepLinkCode = this.getUrlParameter('code') || this.getTelegramStartParam();
         
+        // Debug: Log the code
+        console.log('Deep link code:', this.deepLinkCode);
+        console.log('URL search:', window.location.search);
+        console.log('URL href:', window.location.href);
+        console.log('Telegram available:', !!window.Telegram);
+        
+        // Update debug UI
+        this.updateDebugInfo('code', this.deepLinkCode || 'NONE');
+        this.updateDebugInfo('telegram', window.Telegram ? 'YES' : 'NO');
+        
         // Initialize player
         if (!this.deepLinkCode) {
-            this.showError('No video code provided');
+            this.showError('No video code provided. Please access via Telegram bot.');
+            this.updateDebugInfo('status', 'NO CODE');
             document.getElementById('loadingIndicator').style.display = 'none';
         } else {
+            this.updateDebugInfo('status', 'Initializing...');
             this.initializePlayer();
         }
         
@@ -34,8 +46,27 @@ class VideoPlayerApp {
     
     // Get URL parameter
     getUrlParameter(name) {
+        // Try URL search params first
         const urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get(name);
+        let param = urlParams.get(name);
+        
+        // If not found, try hash
+        if (!param && window.location.hash) {
+            const hash = window.location.hash.substring(1);
+            const hashParams = new URLSearchParams(hash);
+            param = hashParams.get(name);
+        }
+        
+        // If still not found, try tgWebAppStartParam
+        if (!param) {
+            const tgMatch = window.location.href.match(/tgWebAppStartParam=([^&]+)/);
+            if (tgMatch) {
+                param = tgMatch[1];
+            }
+        }
+        
+        console.log(`Getting URL param '${name}':`, param);
+        return param;
     }
 
     getTelegramStartParam() {
@@ -43,7 +74,19 @@ class VideoPlayerApp {
             if (window.Telegram && window.Telegram.WebApp) {
                 const tg = window.Telegram.WebApp;
                 tg.ready();
-                return tg.initDataUnsafe?.start_param || null;
+                
+                // Try multiple ways to get the start param
+                const startParam = tg.initDataUnsafe?.start_param || 
+                                  tg.startParam || 
+                                  null;
+                
+                console.log('Telegram WebApp detected');
+                console.log('Start param:', startParam);
+                console.log('Init data:', tg.initDataUnsafe);
+                
+                return startParam;
+            } else {
+                console.log('Telegram WebApp not available');
             }
         } catch (error) {
             console.error('Error getting Telegram start param:', error);
@@ -155,12 +198,20 @@ class VideoPlayerApp {
             this.loadingIndicator.style.display = 'flex';
             this.errorMessage.style.display = 'none';
             
+            console.log('Initializing player with code:', this.deepLinkCode);
+            
             // Fetch video data from backend API with timeout
             const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
+            const fullUrl = `${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}`;
+            
+            console.log('Fetching from:', fullUrl);
+            this.updateDebugInfo('api', 'Fetching...');
+            this.updateDebugInfo('status', 'Loading API...');
+            
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
             
-            const response = await fetch(`${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}`, {
+            const response = await fetch(fullUrl, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -170,8 +221,16 @@ class VideoPlayerApp {
             
             clearTimeout(timeoutId);
             
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
+            
+            this.updateDebugInfo('api', `Status: ${response.status}`);
+            
             // Handle HTTP errors
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error('API Error Response:', errorText);
+                
                 if (response.status === 404) {
                     throw new Error('Video not found. Please check your video code.');
                 } else if (response.status === 403) {
@@ -185,6 +244,10 @@ class VideoPlayerApp {
             
             // Parse JSON response
             const data = await response.json();
+            console.log('API Response:', data);
+            
+            this.updateDebugInfo('api', 'SUCCESS');
+            this.updateDebugInfo('status', 'Video loaded');
             
             // Validate response data
             if (!data || typeof data !== 'object') {
@@ -210,6 +273,9 @@ class VideoPlayerApp {
         } catch (error) {
             console.error('Error fetching video data:', error);
             
+            this.updateDebugInfo('api', 'FAILED');
+            this.updateDebugInfo('status', 'Error: ' + error.message);
+            
             // Handle specific error types
             let errorMessage = 'Failed to load video. Please try again.';
             
@@ -219,7 +285,7 @@ class VideoPlayerApp {
                 errorMessage = error.message;
             }
             
-            this.showError(errorMessage);
+            this.showError(errorMessage + ' (Code: ' + this.deepLinkCode + ')');
             this.loadingIndicator.style.display = 'none';
             
             // Show retry button
@@ -418,6 +484,15 @@ class VideoPlayerApp {
                     break;
             }
         });
+    }
+    
+    // ========== DEBUG FUNCTIONS ==========
+    
+    updateDebugInfo(field, value) {
+        const debugEl = document.getElementById('debug' + field.charAt(0).toUpperCase() + field.slice(1));
+        if (debugEl) {
+            debugEl.textContent = value;
+        }
     }
     
     // ========== VIDEO EVENT HANDLERS ==========
