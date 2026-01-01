@@ -182,7 +182,7 @@ export default {
         return json({
           title: video.title,
           description: video.description,
-          stream_url: `/api/video/stream?token=${encodeURIComponent(token)}`
+          stream_url: `/api/video/stream?token=${token}`
         });
 
       } catch (e) {
