@@ -968,10 +968,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     }
     
-    // Additional security: Prevent iframe embedding
-    if (window.self !== window.top) {
-        window.top.location = window.self.location;
-    }
+    // // Additional security: Prevent iframe embedding
+    // if (window.self !== window.top) {
+    //     window.top.location = window.self.location;
+    // }
     
     // Watermark protection
     const observer = new MutationObserver((mutations) => {
