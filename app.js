@@ -11,8 +11,12 @@ class VideoPlayerApp {
         // Get deep link code (URL ?code= OR Telegram startapp)
         this.deepLinkCode = this.getUrlParameter('code') || this.getTelegramStartParam();
         
+        // Get user ID from Telegram
+        this.userId = this.getTelegramUserId();
+        
         // Debug: Log the code
         console.log('Deep link code:', this.deepLinkCode);
+        console.log('User ID:', this.userId);
         console.log('URL search:', window.location.search);
         console.log('URL href:', window.location.href);
         console.log('Telegram available:', !!window.Telegram);
@@ -90,6 +94,20 @@ class VideoPlayerApp {
             }
         } catch (error) {
             console.error('Error getting Telegram start param:', error);
+        }
+        return null;
+    }
+    
+    getTelegramUserId() {
+        try {
+            if (window.Telegram && window.Telegram.WebApp) {
+                const tg = window.Telegram.WebApp;
+                const userId = tg.initDataUnsafe?.user?.id || null;
+                console.log('Telegram User ID:', userId);
+                return userId;
+            }
+        } catch (error) {
+            console.error('Error getting Telegram user ID:', error);
         }
         return null;
     }
@@ -192,17 +210,18 @@ class VideoPlayerApp {
         });
     }
     
-    // Initialize player with API call - IMPROVED
+    // Initialize player with API call - IMPROVED WITH VIP CHECK
     async initializePlayer() {
         try {
             this.loadingIndicator.style.display = 'flex';
             this.errorMessage.style.display = 'none';
             
             console.log('Initializing player with code:', this.deepLinkCode);
+            console.log('User ID:', this.userId);
             
             // Fetch video data from backend API with timeout
             const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
-            const fullUrl = `${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}`;
+            const fullUrl = `${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}${this.userId ? '&user_id=' + this.userId : ''}`;
             
             console.log('Fetching from:', fullUrl);
             this.updateDebugInfo('api', 'Fetching...');
@@ -247,16 +266,23 @@ class VideoPlayerApp {
             console.log('API Response:', data);
             
             this.updateDebugInfo('api', 'SUCCESS');
-            this.updateDebugInfo('status', 'Video loaded');
             
             // Validate response data
             if (!data || typeof data !== 'object') {
                 throw new Error('Invalid response format from server.');
             }
             
+            // Check VIP access
+            if (data.access && !data.access.has_access) {
+                this.showVipRequiredError(data);
+                return;
+            }
+            
             if (!data.video_url) {
                 throw new Error('Video URL not found in response.');
             }
+            
+            this.updateDebugInfo('status', 'Video loaded');
             
             // Update UI with video metadata
             this.updateVideoMetadata(data);
@@ -285,7 +311,7 @@ class VideoPlayerApp {
                 errorMessage = error.message;
             }
             
-            this.showError(errorMessage + ' (Code: ' + this.deepLinkCode + ')');
+            this.showError(errorMessage + (this.userId ? '' : ' (User ID: Not logged in)'));
             this.loadingIndicator.style.display = 'none';
             
             // Show retry button
@@ -758,6 +784,68 @@ class VideoPlayerApp {
             this.errorMessage.style.display = 'block';
         }
         this.loadingIndicator.style.display = 'none';
+    }
+    
+    showVipRequiredError(data) {
+        this.loadingIndicator.style.display = 'none';
+        
+        // Create VIP required message with styled UI
+        const errorContainer = this.errorMessage;
+        errorContainer.innerHTML = `
+            <div style="margin-bottom: 15px;">
+                <i class="fas fa-crown" style="font-size: 48px; color: #ffd700; margin-bottom: 15px;"></i>
+            </div>
+            <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px; color: #fff;">
+                VIP Content
+            </div>
+            <div style="font-size: 14px; color: #ffb3b3; margin-bottom: 20px; line-height: 1.5;">
+                ${data.access.message || 'This video is for VIP members only'}
+            </div>
+            ${data.access.vip_expired ? `
+                <div style="font-size: 13px; color: #ff8888; margin-bottom: 15px; padding: 10px; background: rgba(255,68,68,0.1); border-radius: 8px;">
+                    <i class="fas fa-exclamation-circle"></i> Your VIP membership has expired
+                    ${data.access.vip_expired_date ? `<br>Expired: ${new Date(data.access.vip_expired_date).toLocaleDateString()}` : ''}
+                </div>
+            ` : ''}
+            <button class="retry-btn" onclick="window.videoPlayerApp.openVipPurchase()" style="background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%); color: #000; font-weight: bold; padding: 12px 30px; font-size: 16px; margin-bottom: 10px; width: 80%; max-width: 250px;">
+                <i class="fas fa-crown"></i> Upgrade to VIP
+            </button>
+            <div style="font-size: 12px; color: #aaa; margin-top: 10px;">
+                Get unlimited access to all VIP content
+            </div>
+        `;
+        
+        errorContainer.style.display = 'block';
+        
+        // Update video info
+        if (data.title) {
+            this.videoTitle.textContent = data.title + ' 👑';
+            this.overlayTitle.textContent = data.title + ' 👑';
+        }
+        if (data.description) {
+            this.videoDescription.textContent = data.description;
+        }
+        
+        this.updateDebugInfo('status', 'VIP Required');
+    }
+    
+    openVipPurchase() {
+        // Open Telegram bot to purchase VIP
+        if (window.Telegram && window.Telegram.WebApp) {
+            try {
+                const tg = window.Telegram.WebApp;
+                // Close the WebApp and return to bot
+                tg.close();
+                // Or you can use deep link to specific command
+                // window.open('https://t.me/drachin_harch_bot?start=vip', '_blank');
+            } catch (error) {
+                console.error('Error opening bot:', error);
+                alert('Please return to the bot to purchase VIP membership');
+            }
+        } else {
+            // Fallback: open bot link
+            window.open('https://t.me/drachin_harch_bot?start=vip', '_blank');
+        }
     }
     
     // ========== CONTROLS VISIBILITY ==========
