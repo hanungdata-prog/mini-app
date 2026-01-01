@@ -1,13 +1,14 @@
-// Tambahkan logging untuk debugging
 export default {
   async fetch(request, env) {
-    console.log(`Request URL: ${request.url}`);
+    console.log('=== WORKER START ===');
+    console.log('Request URL:', request.url);
+    console.log('SUPABASE_URL:', env.SUPABASE_URL);
     
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS, POST",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
-      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length"
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Range, Authorization",
+      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges"
     };
 
     if (request.method === "OPTIONS") {
@@ -20,11 +21,9 @@ export default {
     if (url.pathname === "/api/video") {
       try {
         const code = url.searchParams.get("code");
-        
-        console.log(`API Video called with code: ${code}`);
+        console.log('API Video called with code:', code);
         
         if (!code || code.trim() === '') {
-          console.log('No code provided');
           return jsonResponse({ 
             error: "Video code is required",
             message: "Please provide a valid video code"
@@ -33,44 +32,48 @@ export default {
 
         // Clean the code
         const cleanCode = code.replace(/[^a-zA-Z0-9]/g, '').trim();
+        console.log('Cleaned code:', cleanCode);
         
         if (cleanCode.length < 3) {
-          console.log('Code too short:', cleanCode);
           return jsonResponse({ 
             error: "Invalid video code",
             message: "Video code is too short"
           }, 400, corsHeaders);
         }
 
-        console.log(`Querying database for code: ${cleanCode}`);
-        
-        // Query Supabase
+        // Query Supabase dengan Anon Key
         const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?deep_link_code=eq.${cleanCode}&select=id,video_url,title,description,category,is_active`;
         
-        console.log(`Database URL: ${dbUrl}`);
+        console.log('Querying database:', dbUrl);
         
         const dbResponse = await fetch(dbUrl, {
           headers: {
-            "apikey": env.SUPABASE_SERVICE_KEY,
-            "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-            "Accept": "application/json"
+            "apikey": env.SUPABASE_ANON_KEY,
+            "Authorization": `Bearer ${env.SUPABASE_ANON_KEY}`,
+            "Accept": "application/json",
+            "Content-Type": "application/json"
           }
         });
 
-        console.log(`Database response status: ${dbResponse.status}`);
+        console.log('Database response status:', dbResponse.status);
         
         if (!dbResponse.ok) {
           const errorText = await dbResponse.text();
-          console.error(`Database error: ${errorText}`);
+          console.error('Database error response:', errorText);
           
           return jsonResponse({ 
             error: "Database error",
-            message: "Cannot connect to video database"
+            message: "Cannot fetch video data",
+            debug: {
+              status: dbResponse.status,
+              statusText: dbResponse.statusText
+            }
           }, 500, corsHeaders);
         }
 
         const videos = await dbResponse.json();
-        console.log(`Found ${videos.length} videos`);
+        console.log('Videos found:', videos.length);
+        console.log('Videos data:', JSON.stringify(videos, null, 2));
         
         if (!videos || videos.length === 0) {
           return jsonResponse({ 
@@ -80,7 +83,7 @@ export default {
         }
 
         const video = videos[0];
-        console.log(`Video found: ${video.title}`);
+        console.log('Video found:', video);
         
         // Check if video is active
         if (video.is_active === false) {
@@ -90,21 +93,14 @@ export default {
           }, 403, corsHeaders);
         }
         
-        // Generate streaming URL
+        // Generate streaming URL (simple version)
         const streamUrl = `https://${url.hostname}/api/stream/${video.id}`;
-        
-        console.log(`Returning stream URL: ${streamUrl}`);
         
         return jsonResponse({
           success: true,
           title: video.title || "Untitled Video",
           description: video.description || "",
-          stream_url: streamUrl,
-          debug: {
-            video_id: video.id,
-            code_received: code,
-            code_cleaned: cleanCode
-          }
+          stream_url: streamUrl
         }, 200, corsHeaders);
         
       } catch (error) {
@@ -121,23 +117,15 @@ export default {
     if (url.pathname.startsWith("/api/stream/")) {
       try {
         const videoId = url.pathname.replace("/api/stream/", "");
+        console.log('Stream request for video ID:', videoId);
         
-        console.log(`Stream request for video ID: ${videoId}`);
-        
-        if (!videoId || isNaN(videoId)) {
-          return new Response("Invalid video ID", { 
-            status: 400, 
-            headers: corsHeaders 
-          });
-        }
-
         // Get video path from database
-        const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?id=eq.${videoId}&select=video_url,title`;
+        const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?id=eq.${videoId}&select=video_url`;
         
         const dbResponse = await fetch(dbUrl, {
           headers: {
-            "apikey": env.SUPABASE_SERVICE_KEY,
-            "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`
+            "apikey": env.SUPABASE_ANON_KEY,
+            "Authorization": `Bearer ${env.SUPABASE_ANON_KEY}`
           }
         });
 
@@ -158,43 +146,25 @@ export default {
         }
 
         const videoPath = videos[0].video_url;
-        console.log(`Video path: ${videoPath}`);
+        console.log('Video path from DB:', videoPath);
         
         // Get from R2
-        const range = request.headers.get("Range");
-        console.log(`Range header: ${range}`);
+        const object = await env.R2_BUCKET.get(videoPath);
         
-        const object = await env.R2_BUCKET.get(videoPath, {
-          range: range ? parseRange(range) : undefined
-        });
-
         if (!object) {
-          console.log(`Video file not found in R2: ${videoPath}`);
+          console.log('Video not found in R2:', videoPath);
           return new Response("Video file not found", { 
             status: 404, 
             headers: corsHeaders 
           });
         }
 
-        console.log(`Video found, size: ${object.size} bytes`);
-        
-        // Set headers
+        // Stream video
         const headers = new Headers(corsHeaders);
-        headers.set("Content-Type", getVideoContentType(videoPath));
+        headers.set("Content-Type", "video/mp4");
         headers.set("Accept-Ranges", "bytes");
         headers.set("Cache-Control", "public, max-age=3600");
         
-        if (range && object.range) {
-          headers.set("Content-Range", 
-            `bytes ${object.range.offset}-${object.range.end}/${object.size}`
-          );
-          return new Response(object.body, { 
-            status: 206, 
-            headers 
-          });
-        }
-
-        headers.set("Content-Length", object.size);
         return new Response(object.body, { 
           status: 200, 
           headers 
@@ -210,14 +180,17 @@ export default {
     }
 
     // Default response
-    return new Response("Video Streaming API v1.0", { 
-      status: 200, 
-      headers: { "Content-Type": "text/plain" } 
-    });
+    return jsonResponse({ 
+      message: "Video Streaming API",
+      endpoints: {
+        get_video: "/api/video?code=VIDEO_CODE",
+        stream: "/api/stream/VIDEO_ID"
+      }
+    }, 200, corsHeaders);
   }
 };
 
-// Helper functions tetap sama
+// Helper function
 function jsonResponse(data, status = 200, corsHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
@@ -226,29 +199,4 @@ function jsonResponse(data, status = 200, corsHeaders = {}) {
       ...corsHeaders
     }
   });
-}
-
-function parseRange(range) {
-  const match = range.match(/bytes=(\d+)-(\d*)/);
-  if (!match) return undefined;
-  
-  const start = parseInt(match[1]);
-  const end = match[2] ? parseInt(match[2]) : undefined;
-  
-  return {
-    offset: start,
-    length: end ? end - start + 1 : undefined
-  };
-}
-
-function getVideoContentType(filename) {
-  const ext = filename.toLowerCase().split('.').pop();
-  switch (ext) {
-    case 'mp4': return 'video/mp4';
-    case 'webm': return 'video/webm';
-    case 'ogg': return 'video/ogg';
-    case 'mov': return 'video/quicktime';
-    case 'm3u8': return 'application/x-mpegURL';
-    default: return 'video/mp4';
-  }
 }
