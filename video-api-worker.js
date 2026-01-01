@@ -22,17 +22,32 @@ export default {
         headers: { ...cors, "Content-Type": "application/json" }
       });
 
-    const supabaseQuery = async (path) => {
-      const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
-headers: {
-  apikey: env.SUPABASE_SERVICE_KEY,
-  Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-  Accept: "application/json"
-}
-      });
-      if (!res.ok) throw new Error("Supabase error");
-      return res.json();
-    };
+const supabaseQuery = async (path) => {
+  const url = `${env.SUPABASE_URL}/rest/v1/${path}`;
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      apikey: env.SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Prefer: "return=representation"
+    }
+  });
+
+  const text = await res.text();
+
+  if (!res.ok) {
+    console.error("Supabase URL:", url);
+    console.error("Supabase status:", res.status);
+    console.error("Supabase response:", text);
+    throw new Error("Supabase error");
+  }
+
+  return JSON.parse(text);
+};
+
 
     // =========================
     // TOKEN UTILS
