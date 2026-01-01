@@ -24,11 +24,11 @@ export default {
 
     const supabaseQuery = async (path) => {
       const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${path}`, {
-        headers: {
-          apikey: env.SUPABASE_SERVICE_KEY,
-          Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY
-          Accept: "application/json"}`
-        }
+headers: {
+  apikey: env.SUPABASE_SERVICE_KEY,
+  Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+  Accept: "application/json"
+}
       });
       if (!res.ok) throw new Error("Supabase error");
       return res.json();
