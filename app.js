@@ -17,13 +17,6 @@ class VideoPlayerApp {
         // Get user ID from Telegram
         this.userId = this.getTelegramUserId();
         
-        // Debug: Log the code
-        console.log('Raw code from URL:', rawCode);
-        console.log('Cleaned video code:', this.deepLinkCode);
-        console.log('User ID:', this.userId);
-        console.log('URL search:', window.location.search);
-        console.log('Telegram available:', !!window.Telegram);
-        
         // Update debug UI
         this.updateDebugInfo('code', this.deepLinkCode || 'INVALID');
         this.updateDebugInfo('telegram', window.Telegram ? 'YES' : 'NO');
@@ -60,14 +53,12 @@ class VideoPlayerApp {
             
             // If found, return immediately (will be cleaned by validateVideoCode)
             if (param) {
-                console.log(`Found '${name}' in search params:`, param);
                 return param;
             }
             
             // Try tgWebAppStartParam
             param = urlParams.get('tgWebAppStartParam');
             if (param) {
-                console.log(`Found tgWebAppStartParam:`, param);
                 return param;
             }
             
@@ -77,15 +68,12 @@ class VideoPlayerApp {
                 // Look for start_param in hash
                 const match = hashPart.match(/start_param=([^&]+)/);
                 if (match) {
-                    console.log(`Found start_param in hash:`, match[1]);
                     return match[1];
                 }
             }
             
-            console.log(`URL param '${name}' not found`);
             return null;
         } catch (error) {
-            console.error('Error parsing URL parameter:', error);
             return null;
         }
     }
@@ -101,13 +89,10 @@ class VideoPlayerApp {
                                   tg.startParam || 
                                   null;
                 
-                console.log('Telegram start_param (raw):', startParam);
                 return startParam;
             } else {
-                console.log('Telegram WebApp not available');
             }
         } catch (error) {
-            console.error('Error getting Telegram start param:', error);
         }
         return null;
     }
@@ -117,7 +102,6 @@ class VideoPlayerApp {
             if (window.Telegram && window.Telegram.WebApp) {
                 const tg = window.Telegram.WebApp;
                 const userId = tg.initDataUnsafe?.user?.id || null;
-                console.log('Telegram User ID:', userId);
                 return userId;
             }
         } catch (error) {
@@ -135,33 +119,27 @@ class VideoPlayerApp {
             return null;
         }
         
-        console.log('validateVideoCode: Input =', rawCode);
-        
         let code = String(rawCode);
         
         // Step 1: Remove everything after # (hash fragment)
         if (code.includes('#')) {
             code = code.split('#')[0];
-            console.log('validateVideoCode: After removing hash =', code);
         }
         
         // Step 2: Remove everything after ? (query string)
         if (code.includes('?')) {
             code = code.split('?')[0];
-            console.log('validateVideoCode: After removing query =', code);
         }
         
         // Step 3: Remove everything after & (parameter separator)
         if (code.includes('&')) {
             code = code.split('&')[0];
-            console.log('validateVideoCode: After removing ampersand =', code);
         }
         
         // Step 4: Decode URL encoding if present
         try {
             if (code.includes('%')) {
                 code = decodeURIComponent(code.split('%')[0]);
-                console.log('validateVideoCode: After decoding =', code);
             }
         } catch (e) {
             console.warn('validateVideoCode: URL decode failed, using as-is');
@@ -169,7 +147,6 @@ class VideoPlayerApp {
         
         // Step 5: Remove all non-alphanumeric characters
         code = code.replace(/[^a-zA-Z0-9]/g, '');
-        console.log('validateVideoCode: After removing special chars =', code);
         
         // Step 6: Trim whitespace
         code = code.trim();
@@ -180,8 +157,7 @@ class VideoPlayerApp {
             console.error('validateVideoCode: Invalid format. Must be 6-10 alphanumeric characters. Got:', code);
             return null;
         }
-        
-        console.log('validateVideoCode: Final valid code =', code);
+
         return code;
     }
     
@@ -294,14 +270,10 @@ class VideoPlayerApp {
                 throw new Error('Invalid video code format: ' + this.deepLinkCode);
             }
             
-            console.log('✓ Initializing player with VALIDATED code:', this.deepLinkCode);
-            console.log('✓ User ID:', this.userId);
-            
             // Fetch video data from backend API with timeout
             const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
             const fullUrl = `${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}${this.userId ? '&user_id=' + this.userId : ''}`;
             
-            console.log('✓ API URL:', fullUrl);
             this.updateDebugInfo('api', 'Fetching...');
             this.updateDebugInfo('status', 'Loading API...');
             
@@ -317,9 +289,6 @@ class VideoPlayerApp {
             });
             
             clearTimeout(timeoutId);
-            
-            console.log('✓ Response status:', response.status);
-            console.log('✓ Response ok:', response.ok);
             
             this.updateDebugInfo('api', `Status: ${response.status}`);
             
@@ -341,8 +310,6 @@ class VideoPlayerApp {
             
             // Parse JSON response
             const data = await response.json();
-            console.log('API Response:', data);
-            
             this.updateDebugInfo('api', 'SUCCESS');
             
             // Validate response data
@@ -608,7 +575,6 @@ class VideoPlayerApp {
     
     handleVideoCanPlay() {
         this.loadingIndicator.style.display = 'none';
-        console.log('Video can play');
         
         // Set initial volume
         this.videoPlayer.volume = this.lastVolume;
@@ -823,7 +789,6 @@ class VideoPlayerApp {
         } else if (window.history.length > 1) {
             window.history.back();
         } else {
-            console.log('No previous page in history');
             // Optional: redirect to home page
             // window.location.href = '/';
         }
