@@ -1,56 +1,8 @@
 name = "mini-app"
 main = "video-api-worker.js"
-compatibility_date = "2024-01-01"
-compatibility_flags = ["nodejs_compat"]
-
-# Account ID Cloudflare Anda
+compatibility_date = "2023-01-01"
 account_id = "4298fcc787e5229647ed981ba9de380b"
 
-# Konfigurasi untuk production
-[env.production]
-name = "harch-video-api"
-workers_dev = false
-route = "mini-app.dramachinaharch.workers.dev/*"
-
-# Konfigurasi untuk preview/staging
-[env.staging]
-name = "harch-video-api-staging"
-workers_dev = true
-
-# Variabel environment
 [vars]
 SUPABASE_URL = "https://wpjfojsfkcgppprvzwoh.supabase.co"
 SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndwamZvanNma2NncHBwcnZ6d29oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU3NTUwNDIsImV4cCI6MjA3MTMzMTA0Mn0.P877Kg2muBOMiqV7YxolL821gNKRo1vrgUPag_tdzwM"
-
-# Secret untuk token signing (jika menggunakan JWT)
-[secrets]
-TOKEN_SECRET = "@tokenSecret"
-
-# Konfigurasi KV namespace (jika perlu)
-[[kv_namespaces]]
-binding = "VIDEO_CACHE"
-id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-preview_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-
-# Konfigurasi R2 bucket (jika perlu)
-[[r2_buckets]]
-binding = "VIDEO_STORAGE"
-bucket_name = "harch-videos"
-preview_bucket_name = "harch-videos-preview"
-
-# Konfigurasi analytics
-[analytics_engine_datasets]
-binding = "ANALYTICS"
-dataset = "video_analytics"
-
-# Batasan resource
-[limits]
-cpu_ms = 50
-
-# Trigger cron jobs (jika perlu)
-[triggers]
-crons = ["0 * * * *"]
-
-# Konfigurasi placement (jika perlu)
-[placement]
-mode = "smart"

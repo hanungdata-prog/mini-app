@@ -2,53 +2,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    
-    <!-- Strict Content Security Policy -->
-    <meta http-equiv="Content-Security-Policy" content="
-        default-src 'self';
-        script-src 'self' https://telegram.org https://cdnjs.cloudflare.com 'unsafe-inline' 'unsafe-eval';
-        style-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline';
-        img-src 'self' data: https:;
-        media-src 'self' https://*.r2.dev https://*.cloudflare.com https://*.cloudflarestream.com;
-        connect-src 'self' https://mini-app.dramachinaharch.workers.dev;
-        frame-ancestors 'none';
-        base-uri 'self';
-        form-action 'none';
-        object-src 'none';
-        upgrade-insecure-requests;
-    ">
-    
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#000000">
-    <meta name="description" content="Harch Short - Secure Video Player">
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Harch Short - Video Player</title>
     
-    <!-- Telegram WebApp SDK -->
+    <!-- Telegram WebApp SDK - CRITICAL -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
-            -webkit-text-size-adjust: none;
-            -moz-text-size-adjust: none;
-            -ms-text-size-adjust: none;
-        }
-        
-        html {
-            height: 100%;
-            width: 100%;
-            overflow: hidden;
-            background: #000;
         }
         
         body {
@@ -61,14 +27,6 @@
             position: fixed;
             top: 0;
             left: 0;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
-            -webkit-user-drag: none;
-            overscroll-behavior: none;
-            touch-action: manipulation;
         }
         
         .container {
@@ -80,7 +38,7 @@
             background: #000;
         }
         
-        /* Header */
+        /* Header with gradient */
         .header {
             padding: 16px 20px;
             background: linear-gradient(180deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 100%);
@@ -91,7 +49,6 @@
             position: relative;
             min-height: 70px;
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
         }
         
         .header-content {
@@ -139,7 +96,7 @@
             background: rgba(255, 255, 255, 0.2);
         }
         
-        /* Video container */
+        /* Video container with immersive design */
         .video-container {
             flex: 1;
             position: relative;
@@ -169,8 +126,6 @@
             background-color: #000;
             outline: none;
             z-index: 1;
-            -webkit-transform: translateZ(0);
-            transform: translateZ(0);
         }
         
         /* Video controls overlay */
@@ -187,12 +142,11 @@
             opacity: 0;
             transition: opacity 0.3s ease;
             background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.7) 100%);
-            pointer-events: none;
         }
         
+        /* Show controls on hover/touch */
         .show-controls {
             opacity: 1 !important;
-            pointer-events: auto;
         }
         
         .top-controls {
@@ -220,8 +174,6 @@
             cursor: pointer;
             transition: all 0.2s ease;
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            pointer-events: auto;
         }
         
         .control-btn:active {
@@ -244,7 +196,6 @@
             margin-bottom: 10px;
             overflow: hidden;
             cursor: pointer;
-            pointer-events: auto;
         }
         
         .progress-bar {
@@ -263,7 +214,7 @@
             margin-top: 5px;
         }
         
-        /* Watermark */
+        /* Watermark with subtle animation */
         .watermark {
             position: absolute;
             bottom: 20px;
@@ -277,7 +228,6 @@
             pointer-events: none;
             user-select: none;
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
             animation: subtle-pulse 4s infinite ease-in-out;
         }
@@ -287,7 +237,7 @@
             50% { opacity: 1; }
         }
         
-        /* Loading indicator */
+        /* Loading indicator with animation */
         .loading {
             position: absolute;
             top: 50%;
@@ -335,7 +285,6 @@
             padding: 25px;
             border-radius: 15px;
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 107, 107, 0.2);
             max-width: 80%;
         }
@@ -370,7 +319,6 @@
             transform-origin: right bottom;
             display: none;
             backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
             z-index: 20;
         }
         
@@ -392,6 +340,17 @@
             border-radius: 50%;
             background: #ff375f;
             cursor: pointer;
+        }
+        
+        /* Prevent selection and context menu */
+        .no-select {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-user-drag: none;
+            -webkit-tap-highlight-color: transparent;
         }
         
         /* Fullscreen styles */
@@ -445,27 +404,6 @@
             z-index: 1000;
             max-width: 90%;
             word-break: break-all;
-            display: none;
-            border: 1px solid #0f0;
-        }
-        
-        /* Security overlay */
-        .security-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: #000;
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 18px;
-            text-align: center;
-            padding: 20px;
-            display: none;
         }
         
         /* Orientation support */
@@ -489,10 +427,6 @@
                 font-size: 12px;
                 padding: 8px 14px;
             }
-            
-            .video-container {
-                background: #000;
-            }
         }
         
         @media screen and (orientation: portrait) {
@@ -510,6 +444,7 @@
             }
         }
         
+        /* Responsive adjustments */
         @media (max-width: 480px) {
             .control-btn {
                 width: 44px;
@@ -529,120 +464,20 @@
                 bottom: 15px;
                 right: 15px;
             }
-            
-            .top-controls {
-                padding: 15px;
-            }
-            
-            .bottom-controls {
-                padding: 15px;
-            }
         }
-        
-        /* High DPI screens */
-        @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-            .control-btn {
-                border: 0.5px solid rgba(255, 255, 255, 0.1);
-            }
-        }
-        
-        /* Dark mode support */
-        @media (prefers-color-scheme: dark) {
-            body {
-                background: #000;
-            }
-        }
-        
-        /* Prevent iOS zoom */
-        input, textarea, select {
-            font-size: 16px;
-        }
-
-        /* Fallback mode styles */
-.fallback-mode .watermark {
-    background: rgba(255, 193, 7, 0.8);
-    color: #000;
-    border-color: rgba(255, 213, 79, 0.5);
-}
-
-.fallback-mode .header {
-    background: linear-gradient(180deg, rgba(255, 193, 7, 0.2) 0%, rgba(0,0,0,0.9) 100%);
-}
-
-/* Network status indicator */
-#networkStatus {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    padding: 10px 20px;
-    border-radius: 20px;
-    font-size: 14px;
-    z-index: 10000;
-    display: none;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: opacity 0.3s;
-}
-
-/* Loading animation for retry */
-.retry-loading {
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 50%;
-    border-top-color: white;
-    animation: spin 1s linear infinite;
-    margin-right: 8px;
-    vertical-align: middle;
-}
-
-/* Offline indicator */
-.offline-indicator {
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    background: rgba(231, 76, 60, 0.9);
-    color: white;
-    padding: 5px 10px;
-    border-radius: 5px;
-    font-size: 11px;
-    z-index: 10001;
-    display: none;
-    backdrop-filter: blur(5px);
-}
     </style>
 </head>
-<body>
-    <!-- Security Overlay -->
-    <div class="security-overlay" id="securityOverlay">
-        <div>
-            <i class="fas fa-shield-alt" style="font-size: 48px; margin-bottom: 20px; color: #ff4444;"></i>
-            <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px;">Security Restriction</div>
-            <div style="font-size: 14px; color: #aaa; margin-bottom: 20px;">Unauthorized access detected</div>
-            <button onclick="window.location.reload()" style="background: #444; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 14px;">
-                Reload Page
-            </button>
-        </div>
-    </div>
-
+<body class="no-select">
     <!-- Debug Info Panel -->
-    <div class="debug-info" id="debugInfo">
+    <div class="debug-info" id="debugInfo" style="display: none;">
         <div>Code: <span id="debugCode">-</span></div>
         <div>Telegram: <span id="debugTelegram">-</span></div>
         <div>API: <span id="debugAPI">-</span></div>
         <div>Status: <span id="debugStatus">-</span></div>
-        <div>Token: <span id="debugToken">-</span></div>
     </div>
 
     <div class="container">
         <div class="header">
-            <button class="back-btn" id="backButton" aria-label="Go back">
-                <i class="fas fa-arrow-left"></i>
-            </button>
             <div class="header-content">
                 <div class="title" id="videoTitle">Harch Short Video</div>
                 <div class="description" id="videoDescription">Loading content...</div>
@@ -653,9 +488,10 @@
             <div class="video-wrapper">
                 <video
                     id="videoPlayer"
-                    controlslist="nodownload noplaybackrate nofullscreen"
-                    disablepictureinpicture
-                    disableremoteplayback
+                    controls
+                    controlsList="nodownload noplaybackrate"
+                    disablePictureInPicture
+                    disableRemotePlayback
                     playsinline
                     webkit-playsinline
                     preload="metadata"
@@ -699,7 +535,7 @@
                 
                 <!-- Volume control -->
                 <div class="volume-container" id="volumeContainer">
-                    <input type="range" min="0" max="1" step="0.01" value="1" class="volume-slider" id="volumeSlider" aria-label="Volume control">
+                    <input type="range" min="0" max="1" step="0.01" value="1" class="volume-slider" id="volumeSlider">
                 </div>
                 
                 <!-- Watermark -->
@@ -720,7 +556,7 @@
                         <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px;"></i>
                     </div>
                     <div id="errorText">Unable to load video</div>
-                    <button class="retry-btn" id="retryButton" style="display: none;">Try Again</button>
+                    <button class="retry-btn" id="retryButton">Try Again</button>
                 </div>
             </div>
         </div>
@@ -729,309 +565,23 @@
     <!-- Load app.js -->
     <script src="app.js"></script>
     
-    <!-- Security Script -->
+    <!-- Debug toggle (double tap title to show/hide) -->
     <script>
-        // Enhanced security measures
-        (function() {
-            'use strict';
-            
-            // Security configuration
-            const SECURITY_CONFIG = {
-                maxConsoleAttempts: 3,
-                devToolsCheckInterval: 1000,
-                blurTimeout: 1000
-            };
-            
-            let securityAttempts = 0;
-            let devToolsDetected = false;
-            let lastFocusTime = Date.now();
-            
-            // === BLOCK KEYBOARD SHORTCUTS ===
-            document.addEventListener('keydown', function(e) {
-                // Block F12
-                if (e.key === 'F12') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    securityAttempts++;
-                    handleSecurityViolation('F12 pressed');
-                    return false;
-                }
-                
-                // Block Ctrl+Shift+I (DevTools)
-                if (e.ctrlKey && e.shiftKey && e.key === 'I') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    securityAttempts++;
-                    handleSecurityViolation('Ctrl+Shift+I pressed');
-                    return false;
-                }
-                
-                // Block Ctrl+Shift+J (Console)
-                if (e.ctrlKey && e.shiftKey && e.key === 'J') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    securityAttempts++;
-                    handleSecurityViolation('Ctrl+Shift+J pressed');
-                    return false;
-                }
-                
-                // Block Ctrl+Shift+C (Inspect)
-                if (e.ctrlKey && e.shiftKey && e.key === 'C') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    securityAttempts++;
-                    handleSecurityViolation('Ctrl+Shift+C pressed');
-                    return false;
-                }
-                
-                // Block Ctrl+U (View Source)
-                if (e.ctrlKey && e.key === 'U') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    securityAttempts++;
-                    handleSecurityViolation('Ctrl+U pressed');
-                    return false;
-                }
-                
-                // Block Ctrl+S (Save Page)
-                if (e.ctrlKey && e.key === 'S') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return false;
-                }
-            });
-            
-            // === BLOCK RIGHT CLICK ===
-            document.addEventListener('contextmenu', function(e) {
-                e.preventDefault();
-                securityAttempts++;
-                if (securityAttempts > 3) {
-                    handleSecurityViolation('Multiple right-click attempts');
-                }
-                return false;
-            });
-            
-            // === BLOCK SELECTION ===
-            document.addEventListener('selectstart', function(e) {
-                e.preventDefault();
-                return false;
-            });
-            
-            // === BLOCK DRAG & DROP ===
-            document.addEventListener('dragstart', function(e) {
-                e.preventDefault();
-                return false;
-            });
-            
-            // === BLOCK COPY/PASTE ===
-            document.addEventListener('copy', function(e) {
-                e.preventDefault();
-                return false;
-            });
-            
-            document.addEventListener('paste', function(e) {
-                e.preventDefault();
-                return false;
-            });
-            
-            // === DEVTOOLS DETECTION ===
-            function detectDevTools() {
-                // Method 1: Check console timing
-                const start = performance.now();
-                console.log('security_check');
-                console.clear();
-                const diff = performance.now() - start;
-                
-                // Method 2: Check window size difference
-                const widthDiff = window.outerWidth - window.innerWidth;
-                const heightDiff = window.outerHeight - window.innerHeight;
-                
-                // Method 3: Check debugger statement
-                try {
-                    debugger;
-                } catch (e) {
-                    // Debugger was triggered
-                }
-                
-                // If devtools detected
-                if (diff > 100 || widthDiff > 160 || heightDiff > 160) {
-                    if (!devToolsDetected) {
-                        devToolsDetected = true;
-                        handleSecurityViolation('DevTools detected');
-                    }
-                    return true;
-                }
-                
-                return false;
+        let tapCount = 0;
+        let tapTimer = null;
+        document.getElementById('videoTitle').addEventListener('click', function() {
+            tapCount++;
+            if (tapCount === 1) {
+                tapTimer = setTimeout(function() {
+                    tapCount = 0;
+                }, 300);
+            } else if (tapCount === 2) {
+                clearTimeout(tapTimer);
+                tapCount = 0;
+                const debugInfo = document.getElementById('debugInfo');
+                debugInfo.style.display = debugInfo.style.display === 'none' ? 'block' : 'none';
             }
-            
-            // Start devtools monitoring
-            setInterval(detectDevTools, SECURITY_CONFIG.devToolsCheckInterval);
-            
-            // === TAB/BLUR DETECTION ===
-            window.addEventListener('blur', function() {
-                lastFocusTime = Date.now();
-                
-                // If video is playing, consider pausing it
-                if (window.videoPlayerApp && window.videoPlayerApp.isVideoPlaying) {
-                    setTimeout(() => {
-                        const timeSinceBlur = Date.now() - lastFocusTime;
-                        if (timeSinceBlur > SECURITY_CONFIG.blurTimeout) {
-                            // User switched away for too long
-                            window.videoPlayerApp.videoPlayer.pause();
-                        }
-                    }, SECURITY_CONFIG.blurTimeout);
-                }
-            });
-            
-            window.addEventListener('focus', function() {
-                lastFocusTime = Date.now();
-            });
-            
-            // === IFRAME PROTECTION ===
-            if (window.self !== window.top) {
-                window.top.location = window.self.location;
-                throw new Error('Frame embedding not allowed');
-            }
-            
-            // === NETWORK REQUEST PROTECTION ===
-            const originalFetch = window.fetch;
-            window.fetch = function(resource, options) {
-                // Block direct R2 bucket access
-                if (typeof resource === 'string' && 
-                    resource.includes('r2.dev') && 
-                    !resource.includes('token=') &&
-                    !resource.includes('_s=')) {
-                    console.warn('[SECURITY] Blocked direct R2 access');
-                    throw new Error('Direct media access not permitted');
-                }
-                
-                return originalFetch(resource, options);
-            };
-            
-            // Override XMLHttpRequest
-            const originalXHR = window.XMLHttpRequest;
-            window.XMLHttpRequest = function() {
-                const xhr = new originalXHR();
-                const originalOpen = xhr.open;
-                
-                xhr.open = function(method, url, async, user, password) {
-                    if (url && url.includes('r2.dev') && !url.includes('token=')) {
-                        throw new Error('Direct media access not permitted');
-                    }
-                    return originalOpen.call(this, method, url, async, user, password);
-                };
-                
-                return xhr;
-            };
-            
-            // === CONSOLE PROTECTION ===
-            if (window.location.hostname !== 'localhost' && 
-                window.location.hostname !== '127.0.0.1') {
-                // Override console methods in production
-                console.log = function() {};
-                console.info = function() {};
-                console.warn = function() {};
-                console.error = function() {};
-                console.debug = function() {};
-                console.table = function() {};
-                console.dir = function() {};
-                console.dirxml = function() {};
-            }
-            
-            // === ELEMENT PROTECTION ===
-            Object.defineProperty(document, 'currentScript', {
-                get: () => null,
-                configurable: false
-            });
-            
-            // === SECURITY VIOLATION HANDLER ===
-            function handleSecurityViolation(reason) {
-                console.warn('[SECURITY VIOLATION]', reason);
-                
-                // Clear sensitive data
-                sessionStorage.clear();
-                localStorage.removeItem('video_data');
-                
-                // Show security overlay
-                const overlay = document.getElementById('securityOverlay');
-                if (overlay) {
-                    overlay.style.display = 'flex';
-                }
-                
-                // Stop any playing video
-                if (window.videoPlayerApp && window.videoPlayerApp.videoPlayer) {
-                    window.videoPlayerApp.videoPlayer.src = '';
-                    window.videoPlayerApp.videoPlayer.load();
-                }
-                
-                // Log to server (in production)
-                logSecurityEvent(reason);
-                
-                // Prevent further execution
-                if (securityAttempts > SECURITY_CONFIG.maxConsoleAttempts) {
-                    document.body.innerHTML = '<div style="padding:50px;text-align:center;font-family:Arial;">Access Restricted</div>';
-                    throw new Error('Security violation threshold exceeded');
-                }
-            }
-            
-            function logSecurityEvent(event) {
-                const logData = {
-                    event: event,
-                    timestamp: new Date().toISOString(),
-                    userAgent: navigator.userAgent,
-                    url: window.location.href,
-                    referrer: document.referrer
-                };
-                
-                // In production, send this to your logging endpoint
-                // fetch('/api/security/log', {
-                //     method: 'POST',
-                //     body: JSON.stringify(logData)
-                // });
-                
-                // For now, just log to console (which is overridden in production)
-                console.warn('Security Event:', logData);
-            }
-            
-            // === DEBUG PANEL TOGGLE ===
-            let tapCount = 0;
-            let tapTimer = null;
-            const titleElement = document.getElementById('videoTitle');
-            if (titleElement) {
-                titleElement.addEventListener('click', function() {
-                    tapCount++;
-                    if (tapCount === 1) {
-                        tapTimer = setTimeout(function() {
-                            tapCount = 0;
-                        }, 300);
-                    } else if (tapCount === 3) { // Triple tap for debug
-                        clearTimeout(tapTimer);
-                        tapCount = 0;
-                        const debugInfo = document.getElementById('debugInfo');
-                        debugInfo.style.display = debugInfo.style.display === 'none' ? 'block' : 'none';
-                    }
-                });
-            }
-            
-            // === CLEAN UP ON UNLOAD ===
-            window.addEventListener('beforeunload', function() {
-                // Clear all sensitive data
-                sessionStorage.clear();
-                
-                // Stop any network requests
-                if (window.videoPlayerApp && window.videoPlayerApp.videoPlayer) {
-                    window.videoPlayerApp.videoPlayer.src = '';
-                }
-            });
-            
-            // === INITIAL SECURITY CHECK ===
-            if (detectDevTools()) {
-                handleSecurityViolation('DevTools open on load');
-            }
-            
-            console.log('[SECURITY] Enhanced protection initialized');
-        })();
+        });
     </script>
 </body>
 </html>
