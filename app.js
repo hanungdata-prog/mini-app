@@ -175,8 +175,8 @@ class VideoPlayerApp {
                 throw new Error('Invalid video code format');
             }
             
-            // Use relative URL for same origin
-            const apiUrl = '/api/video';
+            // Use absolute URL to Cloudflare Workers
+            const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
             const fullUrl = `${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}${this.userId ? '&user_id=' + this.userId : ''}`;
             
             this.updateDebugInfo('api', 'Fetching...');
@@ -281,13 +281,17 @@ class VideoPlayerApp {
     setVideoSource(videoUrl) {
         if (!this.videoPlayer) return;
 
-        // Handle both absolute and relative URLs
+        // Handle stream URL from API
         let finalUrl;
         try {
             if (videoUrl.startsWith('http://') || videoUrl.startsWith('https://')) {
                 finalUrl = videoUrl;
+            } else if (videoUrl.startsWith('/')) {
+                // Relative URL - prepend Cloudflare Workers domain
+                finalUrl = 'https://mini-app.dramachinaharch.workers.dev' + videoUrl;
             } else {
-                finalUrl = new URL(videoUrl, window.location.origin).href;
+                // Just a path - shouldn't happen but handle it
+                finalUrl = 'https://mini-app.dramachinaharch.workers.dev/' + videoUrl;
             }
         } catch (e) {
             console.error('Invalid video URL:', videoUrl);
