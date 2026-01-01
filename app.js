@@ -1,4 +1,4 @@
-// app.js - Enhanced Video Player with Advanced Security
+// app.js - Direct Video Player with R2 Access
 
 class VideoPlayerApp {
     constructor() {
@@ -8,26 +8,20 @@ class VideoPlayerApp {
         // Initialize elements
         this.initializeElements();
         
-        // Security: Encrypt video URL in memory
-        this.encryptedVideoUrl = null;
-        this.videoBlob = null;
-        
-        // Get deep link code
-        let rawCode = this.getUrlParameter('code') || this.getTelegramStartParam();
-        this.deepLinkCode = this.validateVideoCode(rawCode);
-        this.userId = this.getTelegramUserId();
+        // Get video code from URL parameter
+        this.videoCode = this.getUrlParameter('code');
         
         // Update debug UI
-        this.updateDebugInfo('code', this.deepLinkCode || 'INVALID');
-        this.updateDebugInfo('telegram', window.Telegram ? 'YES' : 'NO');
+        this.updateDebugInfo('code', this.videoCode || 'NO CODE');
+        this.updateDebugInfo('status', 'Initializing...');
         
         // Initialize player
-        if (!this.deepLinkCode) {
+        if (!this.videoCode || !this.isValidVideoCode(this.videoCode)) {
             this.showError('Invalid video code. Please check your link and try again.');
             this.updateDebugInfo('status', 'INVALID CODE');
             document.getElementById('loadingIndicator').style.display = 'none';
         } else {
-            this.updateDebugInfo('status', 'Initializing...');
+            this.updateDebugInfo('status', 'Loading video...');
             this.initializePlayer();
         }
         
@@ -42,89 +36,20 @@ class VideoPlayerApp {
         
         // Initialize with controls hidden
         this.hideControls();
+    }
+    
+    // ========== VIDEO CODE VALIDATION ==========
+    
+    isValidVideoCode(code) {
+        if (!code) return false;
         
-        // Advanced security: Monitor DevTools
-        this.setupDevToolsDetection();
-    }
-    
-    // ========== ADVANCED SECURITY FUNCTIONS ==========
-    
-    setupDevToolsDetection() {
-        // Detect if DevTools is open (simplified - less aggressive)
-        let devtoolsOpen = false;
-        const threshold = 160;
+        // Remove any URL fragments or parameters
+        let cleanCode = String(code);
+        cleanCode = cleanCode.split(/[#?&]/)[0];
         
-        const detectDevTools = () => {
-            if (window.outerWidth - window.innerWidth > threshold || 
-                window.outerHeight - window.innerHeight > threshold) {
-                if (!devtoolsOpen) {
-                    devtoolsOpen = true;
-                    // Only log, don't pause video
-                    console.log('%c⚠️ DevTools detected', 'color: orange; font-size: 14px;');
-                }
-            } else {
-                devtoolsOpen = false;
-            }
-        };
-        
-        // Check every 3 seconds (less aggressive)
-        setInterval(detectDevTools, 3000);
-    }
-    
-    onDevToolsOpen() {
-        // Disabled for now - too aggressive
-    }
-    
-    protectConsole() {
-        // Simplified - don't override console completely
-        const originalLog = console.log;
-        console.log = function(...args) {
-            const filtered = args.map(arg => {
-                if (typeof arg === 'string' && arg.includes('r2.dev')) {
-                    return arg.replace(/https:\/\/[^\s]+r2\.dev[^\s]*/g, '[PROTECTED_URL]');
-                }
-                return arg;
-            });
-            return originalLog.apply(console, filtered);
-        };
-    }
-    
-    // Simple XOR encryption for URL obfuscation
-    encryptUrl(url) {
-        const key = 'HarchSecureKey2025';
-        let encrypted = '';
-        for (let i = 0; i < url.length; i++) {
-            encrypted += String.fromCharCode(url.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-        }
-        return btoa(encrypted);
-    }
-    
-    decryptUrl(encrypted) {
-        const key = 'HarchSecureKey2025';
-        const decoded = atob(encrypted);
-        let decrypted = '';
-        for (let i = 0; i < decoded.length; i++) {
-            decrypted += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-        }
-        return decrypted;
-    }
-    
-    // Fetch video as blob to hide source URL
-    async fetchVideoAsBlob(videoUrl) {
-        try {
-            this.updateDebugInfo('status', 'Securing video...');
-            
-            // For large videos, we'll use direct URL but obfuscate it
-            // Fetching entire video as blob is too slow and memory intensive
-            
-            // Instead, just return the URL but we'll hide it in the player
-            return videoUrl;
-            
-        } catch (error) {
-            console.error('Error fetching video blob:', error);
-            // Fallback to direct URL
-            return videoUrl;
-        }
+        // Basic validation: alphanumeric, 6-20 characters
+        const regex = /^[a-zA-Z0-9]{6,20}$/;
+        return regex.test(cleanCode);
     }
     
     // ========== UTILITY FUNCTIONS ==========
@@ -132,129 +57,28 @@ class VideoPlayerApp {
     getUrlParameter(name) {
         try {
             const urlParams = new URLSearchParams(window.location.search);
-            let param = urlParams.get(name);
-            
-            if (param) return param;
-            
-            param = urlParams.get('tgWebAppStartParam');
-            if (param) return param;
-            
-            if (window.location.hash) {
-                const hashPart = window.location.hash.substring(1);
-                const match = hashPart.match(/start_param=([^&]+)/);
-                if (match) return match[1];
-            }
-            
-            return null;
+            return urlParams.get(name);
         } catch (error) {
             return null;
         }
-    }
-
-    getTelegramStartParam() {
-        try {
-            if (window.Telegram && window.Telegram.WebApp) {
-                const tg = window.Telegram.WebApp;
-                tg.ready();
-                
-                const startParam = tg.initDataUnsafe?.start_param || 
-                                  tg.startParam || 
-                                  null;
-                
-                return startParam;
-            }
-        } catch (error) {
-            // Silent fail
-        }
-        return null;
-    }
-    
-    getTelegramUserId() {
-        try {
-            if (window.Telegram && window.Telegram.WebApp) {
-                const tg = window.Telegram.WebApp;
-                const userId = tg.initDataUnsafe?.user?.id || null;
-                return userId;
-            }
-        } catch (error) {
-            console.error('Error getting Telegram user ID:', error);
-        }
-        return null;
-    }
-    
-    validateVideoCode(rawCode) {
-        if (!rawCode) return null;
-        
-        let code = String(rawCode);
-        
-        if (code.includes('#')) code = code.split('#')[0];
-        if (code.includes('?')) code = code.split('?')[0];
-        if (code.includes('&')) code = code.split('&')[0];
-        
-        try {
-            if (code.includes('%')) {
-                code = decodeURIComponent(code.split('%')[0]);
-            }
-        } catch (e) {
-            // Silent fail
-        }
-        
-        code = code.replace(/[^a-zA-Z0-9]/g, '');
-        code = code.trim();
-        
-        const regex = /^[a-zA-Z0-9]{6,10}$/;
-        if (!regex.test(code)) return null;
-
-        return code;
     }
     
     // ========== SETUP FUNCTIONS ==========
     
     setupSecurityMeasures() {
-        // Disable right-click
-        document.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            return false;
-        });
+        // Same security measures as before
+        document.addEventListener('contextmenu', (e) => e.preventDefault());
+        document.addEventListener('selectstart', (e) => e.preventDefault());
+        document.addEventListener('dragstart', (e) => e.preventDefault());
         
-        // Disable selection
-        document.addEventListener('selectstart', (e) => {
-            e.preventDefault();
-            return false;
-        });
-        
-        // Disable drag
-        document.addEventListener('dragstart', (e) => {
-            e.preventDefault();
-            return false;
-        });
-        
-        // Set user-select
         document.body.style.userSelect = 'none';
         document.body.style.webkitUserSelect = 'none';
         document.body.style.mozUserSelect = 'none';
         document.body.style.msUserSelect = 'none';
         
-        // Disable copy/paste
-        document.addEventListener('copy', (e) => {
-            e.preventDefault();
-            return false;
-        });
+        document.addEventListener('copy', (e) => e.preventDefault());
+        document.addEventListener('paste', (e) => e.preventDefault());
         
-        document.addEventListener('paste', (e) => {
-            e.preventDefault();
-            return false;
-        });
-        
-        // Disable screenshot on some devices
-        document.addEventListener('keyup', (e) => {
-            if (e.key === 'PrintScreen') {
-                navigator.clipboard.writeText('');
-                alert('Screenshots are disabled for content protection.');
-            }
-        });
-        
-        // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
         document.addEventListener('keydown', (e) => {
             if (e.key === 'F12' || 
                 (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
@@ -266,11 +90,10 @@ class VideoPlayerApp {
     }
     
     initializeElements() {
+        // Same element initialization as before
         this.videoPlayer = document.getElementById('videoPlayer');
         this.videoContainer = document.getElementById('videoContainer');
-        this.videoTitle = document.getElementById('videoTitle');
         this.overlayTitle = document.getElementById('overlayTitle');
-        this.videoDescription = document.getElementById('videoDescription');
         this.loadingIndicator = document.getElementById('loadingIndicator');
         this.errorMessage = document.getElementById('errorMessage');
         this.errorText = document.getElementById('errorText');
@@ -283,7 +106,6 @@ class VideoPlayerApp {
         this.rewindButton = document.getElementById('rewindButton');
         this.forwardButton = document.getElementById('forwardButton');
         this.retryButton = document.getElementById('retryButton');
-        this.backButton = document.getElementById('backButton');
         
         this.progressBar = document.getElementById('progressBar');
         this.progressContainer = document.getElementById('progressContainer');
@@ -299,26 +121,9 @@ class VideoPlayerApp {
     addVideoSecurity() {
         if (!this.videoPlayer) return;
         
-        // Prevent video context menu
-        this.videoPlayer.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            return false;
-        });
-        
-        // Prevent video selection
-        this.videoPlayer.addEventListener('selectstart', (e) => {
-            e.preventDefault();
-            return false;
-        });
-        
-        // Disable drag
-        this.videoPlayer.addEventListener('dragstart', (e) => {
-            e.preventDefault();
-            return false;
-        });
-        
-        // Note: We keep the src attribute accessible for video to work
-        // but hide it from easy inspection via obfuscation
+        this.videoPlayer.addEventListener('contextmenu', (e) => e.preventDefault());
+        this.videoPlayer.addEventListener('selectstart', (e) => e.preventDefault());
+        this.videoPlayer.addEventListener('dragstart', (e) => e.preventDefault());
     }
     
     // ========== PLAYER INITIALIZATION ==========
@@ -328,12 +133,13 @@ class VideoPlayerApp {
             this.loadingIndicator.style.display = 'flex';
             this.errorMessage.style.display = 'none';
             
-            if (!this.deepLinkCode || !/^[a-zA-Z0-9]{6,10}$/.test(this.deepLinkCode)) {
+            if (!this.videoCode || !this.isValidVideoCode(this.videoCode)) {
                 throw new Error('Invalid video code format');
             }
             
+            // Direct API call to Worker
             const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
-            const fullUrl = `${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}${this.userId ? '&user_id=' + this.userId : ''}`;
+            const fullUrl = `${apiUrl}?code=${encodeURIComponent(this.videoCode)}`;
             
             this.updateDebugInfo('api', 'Fetching...');
             this.updateDebugInfo('status', 'Loading API...');
@@ -359,7 +165,7 @@ class VideoPlayerApp {
                 if (response.status === 404) {
                     throw new Error('Video not found. Please check your video code.');
                 } else if (response.status === 403) {
-                    throw new Error('Access denied. You do not have permission to view this video.');
+                    throw new Error('Access denied. VIP content requires subscription.');
                 } else if (response.status === 500) {
                     throw new Error('Server error. Please try again later.');
                 } else {
@@ -375,7 +181,7 @@ class VideoPlayerApp {
             }
             
             // Check VIP access
-            if (data.access && !data.access.has_access) {
+            if (data.error === "VIP required" || data.error === "VIP expired") {
                 this.showVipRequiredError(data);
                 return;
             }
@@ -389,7 +195,7 @@ class VideoPlayerApp {
             // Update UI
             this.updateVideoMetadata(data);
             
-            this.encryptedVideoUrl = this.encryptUrl(data.stream_url);
+            // Set video source directly
             this.setVideoSource(data.stream_url);
             
             // Setup event listeners
@@ -422,19 +228,8 @@ class VideoPlayerApp {
     
     updateVideoMetadata(data) {
         const title = data.title || 'Untitled Video';
-        if (this.videoTitle) {
-            this.videoTitle.textContent = title;
-        }
         if (this.overlayTitle) {
             this.overlayTitle.textContent = title;
-        }
-        
-        const description = data.description || '';
-        if (this.videoDescription) {
-            this.videoDescription.textContent = description;
-            if (!description) {
-                this.videoDescription.style.display = 'none';
-            }
         }
         
         document.title = title + ' - Harch Short';
@@ -443,7 +238,7 @@ class VideoPlayerApp {
     setVideoSource(videoUrl) {
       if (!this.videoPlayer) return;
 
-      // ✅ FIX: support relative URL
+      // Support relative URL
       let finalUrl;
       try {
         finalUrl = videoUrl.startsWith('http')
@@ -465,8 +260,9 @@ class VideoPlayerApp {
 
       this.videoPlayer.controls = false;
       this.videoPlayer.load();
-    }  
-    // ========== EVENT LISTENERS (abbreviated for space) ==========
+    }
+    
+    // ========== EVENT LISTENERS ==========
     
     setupEventListeners() {
         if (!this.videoPlayer) return;
@@ -841,50 +637,27 @@ class VideoPlayerApp {
                 <i class="fas fa-crown" style="font-size: 48px; color: #ffd700; margin-bottom: 15px;"></i>
             </div>
             <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px; color: #fff;">
-                Konten VIP
+                VIP Content
             </div>
             <div style="font-size: 14px; color: #ffb3b3; margin-bottom: 20px; line-height: 1.5;">
-                ${data.access.message || 'Video ini khusus member VIP'}
+                This video is for VIP members only.
             </div>
-            ${data.access.vip_expired ? `
-                <div style="font-size: 13px; color: #ff8888; margin-bottom: 15px; padding: 10px; background: rgba(255,68,68,0.1); border-radius: 8px;">
-                    <i class="fas fa-exclamation-circle"></i> Akses VIP Anda telah berakhir.
-                    ${data.access.vip_expired_date ? `<br>Expired: ${new Date(data.access.vip_expired_date).toLocaleDateString()}` : ''}
-                </div>
-            ` : ''}
             <button class="retry-btn" onclick="window.videoPlayerApp.openVipPurchase()" style="background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%); color: #000; font-weight: bold; padding: 12px 30px; font-size: 16px; margin-bottom: 10px; width: 80%; max-width: 250px;">
-                <i class="fas fa-crown"></i> Beli Akses VIP
+                <i class="fas fa-crown"></i> Buy VIP Access
             </button>
             <div style="font-size: 12px; color: #aaa; margin-top: 10px;">
-                Dapatkan akses tak terbatas ke semua konten VIP.
+                Get unlimited access to all VIP content.
             </div>
         `;
         
         errorContainer.style.display = 'block';
         
-        if (data.title) {
-            this.videoTitle.textContent = data.title + ' 👑';
-            this.overlayTitle.textContent = data.title + ' 👑';
-        }
-        if (data.description) {
-            this.videoDescription.textContent = data.description;
-        }
-        
         this.updateDebugInfo('status', 'VIP Required');
     }
     
     openVipPurchase() {
-        if (window.Telegram && window.Telegram.WebApp) {
-            try {
-                const tg = window.Telegram.WebApp;
-                tg.close();
-            } catch (error) {
-                console.error('Error opening bot:', error);
-                alert('Silakan kembali ke bot untuk membeli VIP.');
-            }
-        } else {
-            window.open('https://t.me/drachin_harch_bot?start=vip', '_blank');
-        }
+        // Open VIP purchase page
+        window.open('https://example.com/vip-purchase', '_blank');
     }
     
     // ========== CONTROLS VISIBILITY ==========
@@ -922,15 +695,6 @@ class VideoPlayerApp {
     // ========== CLEANUP ==========
     
     destroy() {
-        // Cleanup blob URLs to prevent memory leaks
-        if (this.videoBlob) {
-            URL.revokeObjectURL(this.videoBlob);
-            this.videoBlob = null;
-        }
-        
-        // Clear encrypted URL
-        this.encryptedVideoUrl = null;
-        
         // Clear video source
         if (this.videoPlayer) {
             this.videoPlayer.src = '';
@@ -957,36 +721,4 @@ document.addEventListener('DOMContentLoaded', () => {
             window.videoPlayerApp.destroy();
         }
     });
-    
-    // Prevent video URL extraction via network tab
-    if (window.performance && window.performance.getEntries) {
-        // Clear performance entries periodically
-        setInterval(() => {
-            if (window.performance.clearResourceTimings) {
-                window.performance.clearResourceTimings();
-            }
-        }, 5000);
-    }
-    
-    // // Additional security: Prevent iframe embedding
-    // if (window.self !== window.top) {
-    //     window.top.location = window.self.location;
-    // }
-    
-    // Watermark protection
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            mutation.removedNodes.forEach((node) => {
-                if (node.classList && node.classList.contains('watermark')) {
-                    // Reload page if watermark is removed
-                    location.reload();
-                }
-            });
-        });
-    });
-    
-    const watermark = document.querySelector('.watermark');
-    if (watermark) {
-        observer.observe(watermark.parentNode, { childList: true });
-    }
 });
