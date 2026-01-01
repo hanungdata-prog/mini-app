@@ -492,30 +492,6 @@ handleVideoError() {
   const error = this.videoPlayer.error;
   let errorMessage = 'Failed to load video. Please try again.';
   
-  if (error) {
-    console.error('Video error code:', error.code);
-    console.error('Video error message:', error.message);
-    
-    switch (error.code) {
-      case error.MEDIA_ERR_ABORTED:
-        errorMessage = 'Video playback was aborted.';
-        break;
-      case error.MEDIA_ERR_NETWORK:
-        errorMessage = 'Network error occurred. Check your connection.';
-        break;
-      case error.MEDIA_ERR_DECODE:
-        errorMessage = 'Video decoding error. File may be corrupted.';
-        break;
-      case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
-        errorMessage = 'Video format not supported or file not accessible.';
-        // ✅ FIX: Coba reload dengan delay
-        setTimeout(() => {
-          if (this.retryCount < this.maxRetries) {
-            this.retryLoading();
-          }
-        }, 2000);
-        break;
-    }
   }
   
   this.showError(errorMessage);
