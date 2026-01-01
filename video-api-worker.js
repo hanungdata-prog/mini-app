@@ -2,9 +2,9 @@ export default {
   async fetch(request, env) {
     const cors = {
       "Access-Control-Allow-Origin": request.headers.get("Origin") || "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Range",
-      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges"
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Range, Accept, X-Requested-With",
+      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length, Content-Type"
     };
 
     if (request.method === "OPTIONS") {
@@ -197,8 +197,23 @@ const supabaseQuery = async (path) => {
           headers.set("Content-Language", object.httpMetadata.contentLanguage);
         }
 
+        // Add Content-Length header for accurate file size
+        if (object.size) {
+          headers.set("Content-Length", object.size.toString());
+        }
+
+        // Additional headers for better compatibility with Telegram and other platforms
         headers.set("Accept-Ranges", "bytes");
         headers.set("X-Content-Type-Options", "nosniff");
+        headers.set("X-Frame-Options", "SAMEORIGIN");
+        headers.set("X-XSS-Protection", "1; mode=block");
+
+        // Check if request is coming from Telegram and add specific headers if needed
+        const userAgent = request.headers.get('User-Agent') || '';
+        if (userAgent.toLowerCase().includes('telegram')) {
+          // Additional headers for Telegram compatibility
+          headers.set("Connection", "keep-alive");
+        }
 
         if (range && object.range) {
           headers.set(
