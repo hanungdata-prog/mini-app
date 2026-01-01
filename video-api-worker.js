@@ -11,6 +11,17 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: cors });
     }
+    if (request.method === "HEAD") {
+      return new Response(null, {
+        status: 200,
+        headers: {
+          ...cors,
+          "Content-Type": "video/mp4",
+          "Accept-Ranges": "bytes"
+        }
+      });
+    }
+
 
     const url = new URL(request.url);
 
