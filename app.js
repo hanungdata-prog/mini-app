@@ -441,6 +441,7 @@ class VideoPlayerApp {
     }
     
 // ✅ FIXED: Replace your setVideoSource function with this
+// ✅ FIXED: Replace your setVideoSource function with this
 setVideoSource(videoUrl) {
   if (!this.videoPlayer) return;
 
@@ -458,7 +459,13 @@ setVideoSource(videoUrl) {
     }
   }
 
-  console.log('Setting video source:', finalUrl);
+  console.log('🎬 Setting video source:', finalUrl);
+
+  // ✅ CRITICAL: Remove old event listeners to prevent multiple calls
+  const oldVideo = this.videoPlayer;
+  const newVideo = oldVideo.cloneNode(true);
+  oldVideo.parentNode.replaceChild(newVideo, oldVideo);
+  this.videoPlayer = newVideo;
 
   // ✅ Set attributes DULU sebelum set src
   this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
@@ -468,32 +475,60 @@ setVideoSource(videoUrl) {
   this.videoPlayer.disableRemotePlayback = true;
   this.videoPlayer.controls = false;
 
+  // ✅ Re-setup event listeners on new video element
+  this.setupVideoEventListeners();
+
   // ✅ PENTING: Set src langsung TANPA setTimeout
   this.videoPlayer.src = finalUrl;
   
   // ✅ Trigger load
   this.videoPlayer.load();
+}
 
-  // ✅ Optional: Auto-play saat ready
-  this.videoPlayer.addEventListener('loadedmetadata', () => {
-    console.log('Video metadata loaded');
-    this.videoPlayer.play().catch(err => {
-      console.log('Autoplay prevented (user interaction required):', err);
-    });
-  }, { once: true });
+// ✅ NEW: Separate function for video event listeners only
+setupVideoEventListeners() {
+  if (!this.videoPlayer) return;
+
+  // Clear any existing listeners by using new element reference
+  this.videoPlayer.addEventListener('loadeddata', this.handleVideoLoaded.bind(this));
+  this.videoPlayer.addEventListener('canplay', this.handleVideoCanPlay.bind(this));
+  this.videoPlayer.addEventListener('playing', this.handleVideoPlaying.bind(this));
+  this.videoPlayer.addEventListener('pause', this.handleVideoPause.bind(this));
+  this.videoPlayer.addEventListener('timeupdate', this.handleTimeUpdate.bind(this));
+  this.videoPlayer.addEventListener('ended', this.handleVideoEnded.bind(this));
+  this.videoPlayer.addEventListener('error', this.handleVideoError.bind(this));
+  this.videoPlayer.addEventListener('volumechange', this.handleVolumeChange.bind(this));
+  this.videoPlayer.addEventListener('waiting', this.handleVideoWaiting.bind(this));
+
+  // Click to play/pause
+  this.videoPlayer.addEventListener('click', () => {
+    this.togglePlayPause();
+    this.showControls();
+  });
 }
 
 handleVideoError() {
+  // Prevent multiple error handlers
+  if (this.isHandlingError) {
+    console.log('Already handling error, skipping...');
+    return;
+  }
+  this.isHandlingError = true;
+
   this.loadingIndicator.style.display = 'none';
   const error = this.videoPlayer.error;
+  
+  console.error('❌ Video Error:', {
+    code: error?.code,
+    message: error?.message,
+    src: this.videoPlayer.src,
+    networkState: this.videoPlayer.networkState,
+    readyState: this.videoPlayer.readyState
+  });
+
   let errorMessage = 'Failed to load video. Please try again.';
   
   if (error) {
-    console.error('❌ Video Error Details:');
-    console.error('- Code:', error.code);
-    console.error('- Message:', error.message);
-    console.error('- Video src:', this.videoPlayer.src);
-    
     switch (error.code) {
       case 1: // MEDIA_ERR_ABORTED
         errorMessage = 'Video loading was aborted.';
@@ -505,18 +540,17 @@ handleVideoError() {
         errorMessage = 'Video decoding failed. File may be corrupted.';
         break;
       case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
-        errorMessage = 'Video format not supported or source not accessible.';
-        console.error('- This usually means the URL is invalid or token expired');
+        errorMessage = 'Video format not supported or file not accessible. Please check if the file exists in R2 bucket.';
         break;
     }
-  } else {
-    console.error('❌ Video error without error object');
-    console.error('- Video src:', this.videoPlayer.src);
-    console.error('- Video readyState:', this.videoPlayer.readyState);
-    console.error('- Video networkState:', this.videoPlayer.networkState);
   }
   
   this.showError(errorMessage);
+  
+  // Reset flag after 2 seconds
+  setTimeout(() => {
+    this.isHandlingError = false;
+  }, 2000);
 }
     
     // ========== EVENT LISTENERS ==========
