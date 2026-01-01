@@ -1,4 +1,5 @@
-// Cloudflare Worker for secure video access with URL obfuscation and proxy
+// Cloudflare Worker for secure video access with VIP protection
+// This worker acts as an API layer between the frontend and Supabase
 
 // Helper function to validate deep link code format
 function isValidDeepLinkCode(code) {
@@ -206,38 +207,6 @@ async function addToWatchHistory(supabase, userId, videoId) {
     }
 }
 
-// Function to generate encrypted URL token
-function generateVideoToken(videoUrl, expiresIn = 3600) {
-    const expires = Math.floor(Date.now() / 1000) + expiresIn;
-    const data = {
-        url: videoUrl,
-        expires: expires,
-        timestamp: Date.now()
-    };
-    
-    // Simple base64 encoding (in production, use proper encryption)
-    const token = btoa(JSON.stringify(data));
-    return token;
-}
-
-// Function to decode video token
-function decodeVideoToken(token) {
-    try {
-        const decoded = atob(token);
-        const data = JSON.parse(decoded);
-        
-        // Check if token is expired
-        if (data.expires && data.expires < Math.floor(Date.now() / 1000)) {
-            throw new Error('Token expired');
-        }
-        
-        return data.url;
-    } catch (error) {
-        console.error('Token decode error:', error);
-        throw error;
-    }
-}
-
 // Main request handler
 export default {
     async fetch(request, env, ctx) {
@@ -382,6 +351,11 @@ export default {
                     }
                 }
 
+                // Validate and secure the video URL
+                const secureVideoUrl = userAccess.has_access 
+                    ? validateAndSecureVideoUrl(video.video_url) 
+                    : null;
+
                 // Prepare response
                 const response = {
                     video_id: video.video_id,
@@ -395,16 +369,8 @@ export default {
                 };
 
                 // Only include video_url if user has access
-                if (userAccess.has_access && video.video_url) {
-                    // Generate encrypted token for video URL
-                    const videoToken = generateVideoToken(video.video_url);
-                    
-                    // Return token instead of direct URL
-                    response.video_token = videoToken;
-                    response.video_proxy_url = `/api/proxy/video?token=${videoToken}`;
-                    
-                    // Also include direct URL for fallback (obfuscated)
-                    response.video_url = video.video_url;
+                if (userAccess.has_access && secureVideoUrl) {
+                    response.video_url = secureVideoUrl;
                 }
 
                 return new Response(
@@ -426,118 +392,6 @@ export default {
                         status: 500,
                         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
                     }
-                );
-            }
-        }
-
-        // Route: GET /api/proxy/video?token=XXX or ?url=XXX
-        if (url.pathname === '/api/proxy/video' && request.method === 'GET') {
-            try {
-                const token = url.searchParams.get('token');
-                const directUrl = url.searchParams.get('url');
-                
-                let targetUrl;
-                
-                if (token) {
-                    // Decode token to get actual URL
-                    targetUrl = decodeVideoToken(token);
-                } else if (directUrl) {
-                    targetUrl = decodeURIComponent(directUrl);
-                } else {
-                    return new Response(
-                        JSON.stringify({ error: 'Missing token or url parameter' }),
-                        { status: 400, headers: corsHeaders }
-                    );
-                }
-                
-                // Validate URL is allowed (only from trusted domains)
-                const trustedDomains = [
-                    'r2.dev',
-                    'pub-c5c15df1eaff4bf38ede1257da3751b1.r2.dev',
-                    'cloudflarestream.com',
-                    'cdn.cloudflare.com'
-                ];
-                
-                const urlObj = new URL(targetUrl);
-                const isAllowed = trustedDomains.some(domain => urlObj.hostname.includes(domain));
-                
-                if (!isAllowed) {
-                    return new Response(
-                        JSON.stringify({ error: 'Domain not allowed' }),
-                        { status: 403, headers: corsHeaders }
-                    );
-                }
-                
-                console.log(`Proxying video request to: ${urlObj.hostname}`);
-                
-                // Forward range headers for seeking support
-                const headers = new Headers();
-                const rangeHeader = request.headers.get('Range');
-                if (rangeHeader) {
-                    headers.set('Range', rangeHeader);
-                }
-                
-                // Fetch the video with timeout
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 30000);
-                
-                const videoResponse = await fetch(targetUrl, {
-                    headers: headers,
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                
-                if (!videoResponse.ok) {
-                    return new Response(
-                        JSON.stringify({ 
-                            error: 'Failed to fetch video', 
-                            status: videoResponse.status 
-                        }),
-                        { status: videoResponse.status, headers: corsHeaders }
-                    );
-                }
-                
-                // Create response with video data
-                const responseHeaders = new Headers(corsHeaders);
-                responseHeaders.set('Content-Type', videoResponse.headers.get('Content-Type') || 'video/mp4');
-                responseHeaders.set('Accept-Ranges', 'bytes');
-                responseHeaders.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
-                responseHeaders.set('Pragma', 'no-cache');
-                responseHeaders.set('Expires', '0');
-                
-                // Copy content headers
-                const contentLength = videoResponse.headers.get('Content-Length');
-                const contentRange = videoResponse.headers.get('Content-Range');
-                
-                if (contentLength) {
-                    responseHeaders.set('Content-Length', contentLength);
-                }
-                if (contentRange) {
-                    responseHeaders.set('Content-Range', contentRange);
-                }
-                
-                return new Response(videoResponse.body, {
-                    status: videoResponse.status,
-                    headers: responseHeaders
-                });
-                
-            } catch (error) {
-                console.error('Proxy error:', error);
-                
-                if (error.name === 'AbortError') {
-                    return new Response(
-                        JSON.stringify({ error: 'Request timeout' }),
-                        { status: 504, headers: corsHeaders }
-                    );
-                }
-                
-                return new Response(
-                    JSON.stringify({ 
-                        error: 'Proxy failed',
-                        message: error.message 
-                    }),
-                    { status: 500, headers: corsHeaders }
                 );
             }
         }
