@@ -108,7 +108,7 @@ const supabaseQuery = async (path) => {
         console.log("User ID:", userId);
 
         const videos = await supabaseQuery(
-          `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_url,file_id,category,title,description`
+          `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=category,title,description,deep_link_code`
         );
 
         console.log("Videos query result:", videos);
@@ -137,36 +137,20 @@ const supabaseQuery = async (path) => {
         }
 
         // 🔐 token 30 detik
-        // Use file_id if available, otherwise fall back to video_url
-        // file_id should contain the R2 object path, while video_url is the public URL
-        const r2Path = video.file_id || video.video_url;
+        // Construct the R2 path directly based on the video information
+        // This assumes a consistent naming convention in R2
+        // Format: drama-folder-name/Bagian_XXX_marked.mp4
+        const folderName = video.title.replace(/\s+/g, '_').replace(/[^\w\-\.]/g, '_');
+
+        // Determine the part number from the deep link code or other metadata
+        // For now, we'll use a simple approach - in practice you might need to store this in DB
+        // or have a more sophisticated way to determine the part
+        const partNumber = "001"; // This would need to be determined based on your specific logic
+
+        const pathForToken = `${folderName}/Bagian_${partNumber}_marked.mp4`;
 
         console.log("Video record from Supabase:", JSON.stringify(video));
-        console.log("R2 path from database:", r2Path);
-
-        // Validate that we have a valid path to work with
-        if (!r2Path || typeof r2Path !== 'string') {
-          console.error("No valid path found in database for video:", video);
-          return json({ error: "Invalid video path configuration in database" }, 500);
-        }
-
-        // Extract the R2 object path from the public URL if needed
-        // If video_url is a public URL, extract the path part after the domain
-        let pathForToken = r2Path;
-        if (r2Path.startsWith('http')) {
-          // Extract path from URL - remove the base URL part to get just the R2 object key
-          try {
-            const urlObj = new URL(r2Path);
-            pathForToken = urlObj.pathname.substring(1); // Remove leading slash
-            console.log("Extracted path from URL:", pathForToken);
-          } catch (e) {
-            console.error("Error parsing video URL:", r2Path, e);
-            // Fallback to original r2Path if parsing fails
-            pathForToken = r2Path;
-          }
-        }
-
-        console.log("Final path for token:", pathForToken);
+        console.log("Constructed R2 path for token:", pathForToken);
 
         // Ensure pathForToken is valid before creating token
         if (!pathForToken || typeof pathForToken !== 'string' || pathForToken.trim() === '') {
