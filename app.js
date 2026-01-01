@@ -50,7 +50,7 @@ class VideoPlayerApp {
     // ========== ADVANCED SECURITY FUNCTIONS ==========
     
     setupDevToolsDetection() {
-        // Detect if DevTools is open
+        // Detect if DevTools is open (simplified - less aggressive)
         let devtoolsOpen = false;
         const threshold = 160;
         
@@ -59,67 +59,34 @@ class VideoPlayerApp {
                 window.outerHeight - window.innerHeight > threshold) {
                 if (!devtoolsOpen) {
                     devtoolsOpen = true;
-                    this.onDevToolsOpen();
+                    // Only log, don't pause video
+                    console.log('%c⚠️ DevTools detected', 'color: orange; font-size: 14px;');
                 }
             } else {
                 devtoolsOpen = false;
             }
         };
         
-        // Check every 1 second
-        setInterval(detectDevTools, 1000);
-        
-        // Debug protection
-        const devtools = /./;
-        devtools.toString = () => {
-            this.onDevToolsOpen();
-            return 'DevTools detected';
-        };
-        console.log('%c', devtools);
-        
-        // Prevent console.log interception
-        this.protectConsole();
+        // Check every 3 seconds (less aggressive)
+        setInterval(detectDevTools, 3000);
     }
     
     onDevToolsOpen() {
-        // When DevTools is detected, pause video and show warning
-        if (this.videoPlayer && !this.videoPlayer.paused) {
-            this.videoPlayer.pause();
-        }
-        
-        // Optional: Clear video source
-        if (this.videoPlayer) {
-            this.videoPlayer.src = '';
-            if (this.videoBlob) {
-                URL.revokeObjectURL(this.videoBlob);
-                this.videoBlob = null;
-            }
-        }
-        
-        // Show warning (optional)
-        console.clear();
-        console.log('%c🚫 AKSES DITOLAK', 'color: red; font-size: 20px; font-weight: bold;');
-        console.log('%cDemi keamanan konten, video dihentikan saat DevTools terbuka.', 'color: orange; font-size: 14px;');
+        // Disabled for now - too aggressive
     }
     
     protectConsole() {
-        // Disable common console methods to prevent URL extraction
-        const noop = () => {};
-        
-        // Override console methods
-        ['log', 'debug', 'info', 'warn', 'error', 'trace'].forEach(method => {
-            const original = console[method];
-            console[method] = function(...args) {
-                // Filter out sensitive data
-                const filtered = args.map(arg => {
-                    if (typeof arg === 'string' && (arg.includes('r2.dev') || arg.includes('http'))) {
-                        return '[PROTECTED URL]';
-                    }
-                    return arg;
-                });
-                return original.apply(console, filtered);
-            };
-        });
+        // Simplified - don't override console completely
+        const originalLog = console.log;
+        console.log = function(...args) {
+            const filtered = args.map(arg => {
+                if (typeof arg === 'string' && arg.includes('r2.dev')) {
+                    return arg.replace(/https:\/\/[^\s]+r2\.dev[^\s]*/g, '[PROTECTED_URL]');
+                }
+                return arg;
+            });
+            return originalLog.apply(console, filtered);
+        };
     }
     
     // Simple XOR encryption for URL obfuscation
@@ -422,14 +389,11 @@ class VideoPlayerApp {
             // Update UI
             this.updateVideoMetadata(data);
             
-            // SECURITY: Encrypt URL and fetch as blob
+            // SECURITY: Encrypt URL for reference (but don't use blob for large videos)
             this.encryptedVideoUrl = this.encryptUrl(data.video_url);
             
-            // Fetch video as blob to hide source
-            const blobUrl = await this.fetchVideoAsBlob(data.video_url);
-            
-            // Set video source with blob URL
-            this.setVideoSource(blobUrl);
+            // Set video source directly (blob is too slow for large videos)
+            this.setVideoSource(data.video_url);
             
             // Setup event listeners
             this.setupEventListeners();
