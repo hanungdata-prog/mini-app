@@ -187,11 +187,6 @@ headers: {
     return json({ error: "Not Found" }, 404);
   }
 };
-const res = await fetch(...);
-console.log("Supabase URL:", `${env.SUPABASE_URL}/rest/v1/${path}`);
-console.log("Supabase status:", res.status);
-const text = await res.text();
-console.log("Supabase response:", text);
 
 // =========================
 // RANGE HELPER
