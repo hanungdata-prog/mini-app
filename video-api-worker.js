@@ -70,7 +70,7 @@ export default {
         ...video,
         has_access: hasAccess,
         stream_url: hasAccess
-          ? `/api/video/stream?code=${code}&user_id=${userId || ""}`
+          ? `https://mini-app.dramachinaharch.workers.dev/api/video/stream?code=${code}&user_id=${userId || ""}`
           : null
       });
     }
