@@ -11,6 +11,18 @@ class VideoPlayerApp {
         // Get deep link code (URL ?code= OR Telegram startapp)
         this.deepLinkCode = this.getUrlParameter('code') || this.getTelegramStartParam();
         
+        // Validate and clean the code
+        if (this.deepLinkCode) {
+            const cleanedCode = this.validateVideoCode(this.deepLinkCode);
+            if (cleanedCode) {
+                this.deepLinkCode = cleanedCode;
+                console.log('Video code validated and cleaned:', this.deepLinkCode);
+            } else {
+                console.error('Invalid video code format:', this.deepLinkCode);
+                this.deepLinkCode = null;
+            }
+        }
+        
         // Get user ID from Telegram
         this.userId = this.getTelegramUserId();
         
@@ -48,25 +60,40 @@ class VideoPlayerApp {
         this.hideControls();
     }
     
-    // Get URL parameter
+    // Get URL parameter - FIXED for Telegram WebApp
     getUrlParameter(name) {
         // Try URL search params first
         const urlParams = new URLSearchParams(window.location.search);
         let param = urlParams.get(name);
         
-        // If not found, try hash
+        // Clean the parameter - remove hash and everything after it
+        if (param && param.includes('#')) {
+            param = param.split('#')[0];
+        }
+        
+        // If not found, try tgWebAppStartParam
+        if (!param) {
+            const tgMatch = window.location.href.match(/tgWebAppStartParam=([^&#]+)/);
+            if (tgMatch) {
+                param = tgMatch[1];
+            }
+        }
+        
+        // If still not found, try hash (but clean it)
         if (!param && window.location.hash) {
             const hash = window.location.hash.substring(1);
             const hashParams = new URLSearchParams(hash);
             param = hashParams.get(name);
+            
+            // Clean if contains tgWebAppData
+            if (param && param.includes('tgWebAppData')) {
+                param = param.split('tgWebAppData')[0].replace(/[#&]+$/, '');
+            }
         }
         
-        // If still not found, try tgWebAppStartParam
-        if (!param) {
-            const tgMatch = window.location.href.match(/tgWebAppStartParam=([^&]+)/);
-            if (tgMatch) {
-                param = tgMatch[1];
-            }
+        // Final cleanup - remove any trailing special characters
+        if (param) {
+            param = param.replace(/[#&?]+$/, '').trim();
         }
         
         console.log(`Getting URL param '${name}':`, param);
@@ -80,12 +107,26 @@ class VideoPlayerApp {
                 tg.ready();
                 
                 // Try multiple ways to get the start param
-                const startParam = tg.initDataUnsafe?.start_param || 
-                                  tg.startParam || 
-                                  null;
+                let startParam = tg.initDataUnsafe?.start_param || 
+                                tg.startParam || 
+                                null;
+                
+                // Clean the parameter if it contains hash or special chars
+                if (startParam) {
+                    // Remove hash and everything after it
+                    if (startParam.includes('#')) {
+                        startParam = startParam.split('#')[0];
+                    }
+                    // Remove any URL encoded data
+                    if (startParam.includes('%')) {
+                        startParam = startParam.split('%')[0];
+                    }
+                    // Clean trailing special characters
+                    startParam = startParam.replace(/[#&?]+$/, '').trim();
+                }
                 
                 console.log('Telegram WebApp detected');
-                console.log('Start param:', startParam);
+                console.log('Start param (cleaned):', startParam);
                 console.log('Init data:', tg.initDataUnsafe);
                 
                 return startParam;
@@ -112,7 +153,36 @@ class VideoPlayerApp {
         return null;
     }
     
-    // Setup security measures
+    // ========== UTILITY FUNCTIONS ==========
+    
+    // Validate and clean video code
+    validateVideoCode(code) {
+        if (!code) return null;
+        
+        // Remove any hash fragments
+        code = code.split('#')[0];
+        
+        // Remove any URL parameters
+        code = code.split('?')[0];
+        code = code.split('&')[0];
+        
+        // Remove URL encoding artifacts
+        code = code.split('%')[0];
+        
+        // Remove special characters and whitespace
+        code = code.replace(/[^a-zA-Z0-9]/g, '').trim();
+        
+        // Validate format: 6-10 alphanumeric characters
+        const regex = /^[a-zA-Z0-9]{6,10}$/;
+        if (!regex.test(code)) {
+            console.warn('Invalid video code format:', code);
+            return null;
+        }
+        
+        return code;
+    }
+    
+    // ========== SETUP FUNCTIONS ==========
     setupSecurityMeasures() {
         // Disable right-click context menu
         document.addEventListener('contextmenu', (e) => {
