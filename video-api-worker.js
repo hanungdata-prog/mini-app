@@ -176,9 +176,28 @@ const supabaseQuery = async (path) => {
         }
 
         const headers = new Headers(cors);
-        headers.set("Content-Type", "video/mp4");
+
+        // Use the content type from R2 object if available, otherwise default to video/mp4
+        const contentType = object.httpMetadata?.contentType || "video/mp4";
+        headers.set("Content-Type", contentType);
+
+        // Also set other useful metadata from R2 object
+        if (object.httpMetadata?.contentDisposition) {
+          headers.set("Content-Disposition", object.httpMetadata.contentDisposition);
+        }
+        if (object.httpMetadata?.cacheControl) {
+          headers.set("Cache-Control", object.httpMetadata.cacheControl);
+        } else {
+          headers.set("Cache-Control", "no-store");
+        }
+        if (object.httpMetadata?.contentEncoding) {
+          headers.set("Content-Encoding", object.httpMetadata.contentEncoding);
+        }
+        if (object.httpMetadata?.contentLanguage) {
+          headers.set("Content-Language", object.httpMetadata.contentLanguage);
+        }
+
         headers.set("Accept-Ranges", "bytes");
-        headers.set("Cache-Control", "no-store");
         headers.set("X-Content-Type-Options", "nosniff");
 
         if (range && object.range) {
