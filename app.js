@@ -975,25 +975,28 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     }
     
+    // HAPUS atau KOMENTARI kode ini karena tidak kompatibel dengan Telegram Web App
     // Additional security: Prevent iframe embedding
-    if (window.self !== window.top) {
-        window.top.location = window.self.location;
-    }
+    // if (window.self !== window.top) {
+    //     window.top.location = window.self.location;
+    // }
     
-    // Watermark protection
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            mutation.removedNodes.forEach((node) => {
-                if (node.classList && node.classList.contains('watermark')) {
-                    // Reload page if watermark is removed
-                    location.reload();
-                }
+    // Watermark protection (kondisional - hanya aktif jika bukan di Telegram Web App)
+    if (!window.Telegram?.WebApp) {
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.removedNodes.forEach((node) => {
+                    if (node.classList && node.classList.contains('watermark')) {
+                        // Reload page if watermark is removed
+                        location.reload();
+                    }
+                });
             });
         });
-    });
-    
-    const watermark = document.querySelector('.watermark');
-    if (watermark) {
-        observer.observe(watermark.parentNode, { childList: true });
+        
+        const watermark = document.querySelector('.watermark');
+        if (watermark) {
+            observer.observe(watermark.parentNode, { childList: true });
+        }
     }
 });
