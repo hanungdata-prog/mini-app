@@ -1,73 +1,119 @@
+// Tambahkan logging untuk debugging
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
+    console.log(`Request URL: ${request.url}`);
     
-    // CORS headers
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Range",
-      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges"
+      "Access-Control-Allow-Methods": "GET, OPTIONS, POST",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, Range",
+      "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length"
     };
 
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
 
+    const url = new URL(request.url);
+    
     // ==================== API: GET VIDEO METADATA ====================
     if (url.pathname === "/api/video") {
-      const code = url.searchParams.get("code");
-      
-      if (!code) {
-        return jsonResponse({ error: "Video code required" }, 400, corsHeaders);
-      }
-
       try {
-        // 1. Validasi format code
-        const cleanCode = code.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
+        const code = url.searchParams.get("code");
         
-        // 2. Query database
+        console.log(`API Video called with code: ${code}`);
+        
+        if (!code || code.trim() === '') {
+          console.log('No code provided');
+          return jsonResponse({ 
+            error: "Video code is required",
+            message: "Please provide a valid video code"
+          }, 400, corsHeaders);
+        }
+
+        // Clean the code
+        const cleanCode = code.replace(/[^a-zA-Z0-9]/g, '').trim();
+        
+        if (cleanCode.length < 3) {
+          console.log('Code too short:', cleanCode);
+          return jsonResponse({ 
+            error: "Invalid video code",
+            message: "Video code is too short"
+          }, 400, corsHeaders);
+        }
+
+        console.log(`Querying database for code: ${cleanCode}`);
+        
+        // Query Supabase
         const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?deep_link_code=eq.${cleanCode}&select=id,video_url,title,description,category,is_active`;
+        
+        console.log(`Database URL: ${dbUrl}`);
         
         const dbResponse = await fetch(dbUrl, {
           headers: {
             "apikey": env.SUPABASE_SERVICE_KEY,
-            "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`
+            "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+            "Accept": "application/json"
           }
         });
 
+        console.log(`Database response status: ${dbResponse.status}`);
+        
+        if (!dbResponse.ok) {
+          const errorText = await dbResponse.text();
+          console.error(`Database error: ${errorText}`);
+          
+          return jsonResponse({ 
+            error: "Database error",
+            message: "Cannot connect to video database"
+          }, 500, corsHeaders);
+        }
+
         const videos = await dbResponse.json();
+        console.log(`Found ${videos.length} videos`);
         
         if (!videos || videos.length === 0) {
-          return jsonResponse({ error: "Video not found" }, 404, corsHeaders);
+          return jsonResponse({ 
+            error: "Video not found",
+            message: "No video found with the provided code"
+          }, 404, corsHeaders);
         }
 
         const video = videos[0];
+        console.log(`Video found: ${video.title}`);
         
-        // 3. Check if video is active
+        // Check if video is active
         if (video.is_active === false) {
-          return jsonResponse({ error: "Video is not available" }, 403, corsHeaders);
+          return jsonResponse({ 
+            error: "Video unavailable",
+            message: "This video is currently not available"
+          }, 403, corsHeaders);
         }
         
-        // 4. Generate signed URL (valid 1 hour)
-        const expires = Math.floor(Date.now() / 1000) + 3600; // 1 hour
-        const signature = await generateSignature(
-          `${video.id}-${expires}`,
-          env.STREAM_SECRET
-        );
+        // Generate streaming URL
+        const streamUrl = `https://${url.hostname}/api/stream/${video.id}`;
         
-        // 5. Return stream URL with signature
-        const streamUrl = `https://${url.hostname}/api/stream/${video.id}?exp=${expires}&sig=${signature}`;
+        console.log(`Returning stream URL: ${streamUrl}`);
         
         return jsonResponse({
-          title: video.title,
-          description: video.description,
-          stream_url: streamUrl
+          success: true,
+          title: video.title || "Untitled Video",
+          description: video.description || "",
+          stream_url: streamUrl,
+          debug: {
+            video_id: video.id,
+            code_received: code,
+            code_cleaned: cleanCode
+          }
         }, 200, corsHeaders);
         
       } catch (error) {
         console.error("API Error:", error);
-        return jsonResponse({ error: "Server error" }, 500, corsHeaders);
+        return jsonResponse({ 
+          error: "Server error",
+          message: "An unexpected error occurred",
+          debug: error.message
+        }, 500, corsHeaders);
       }
     }
 
@@ -75,31 +121,18 @@ export default {
     if (url.pathname.startsWith("/api/stream/")) {
       try {
         const videoId = url.pathname.replace("/api/stream/", "");
-        const expires = url.searchParams.get("exp");
-        const signature = url.searchParams.get("sig");
         
-        // 1. Validate signature
-        if (!videoId || !expires || !signature) {
-          return new Response("Invalid request", { status: 400 });
+        console.log(`Stream request for video ID: ${videoId}`);
+        
+        if (!videoId || isNaN(videoId)) {
+          return new Response("Invalid video ID", { 
+            status: 400, 
+            headers: corsHeaders 
+          });
         }
-        
-        const expectedSig = await generateSignature(
-          `${videoId}-${expires}`,
-          env.STREAM_SECRET
-        );
-        
-        if (signature !== expectedSig) {
-          return new Response("Invalid signature", { status: 403 });
-        }
-        
-        // 2. Check expiration
-        const now = Math.floor(Date.now() / 1000);
-        if (parseInt(expires) < now) {
-          return new Response("URL expired", { status: 403 });
-        }
-        
-        // 3. Get video path from database
-        const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?id=eq.${videoId}&select=video_url`;
+
+        // Get video path from database
+        const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?id=eq.${videoId}&select=video_url,title`;
         
         const dbResponse = await fetch(dbUrl, {
           headers: {
@@ -108,32 +141,48 @@ export default {
           }
         });
 
+        if (!dbResponse.ok) {
+          return new Response("Database error", { 
+            status: 500, 
+            headers: corsHeaders 
+          });
+        }
+
         const videos = await dbResponse.json();
         
         if (!videos || videos.length === 0) {
-          return new Response("Video not found", { status: 404 });
+          return new Response("Video not found", { 
+            status: 404, 
+            headers: corsHeaders 
+          });
         }
 
         const videoPath = videos[0].video_url;
+        console.log(`Video path: ${videoPath}`);
         
-        // 4. Get video from R2 (private bucket)
+        // Get from R2
         const range = request.headers.get("Range");
+        console.log(`Range header: ${range}`);
+        
         const object = await env.R2_BUCKET.get(videoPath, {
           range: range ? parseRange(range) : undefined
         });
 
         if (!object) {
-          return new Response("Video file not found", { status: 404 });
+          console.log(`Video file not found in R2: ${videoPath}`);
+          return new Response("Video file not found", { 
+            status: 404, 
+            headers: corsHeaders 
+          });
         }
 
-        // 5. Stream video with proper headers
+        console.log(`Video found, size: ${object.size} bytes`);
+        
+        // Set headers
         const headers = new Headers(corsHeaders);
         headers.set("Content-Type", getVideoContentType(videoPath));
         headers.set("Accept-Ranges", "bytes");
-        headers.set("Cache-Control", "private, max-age=3600"); // Cache 1 hour
-        
-        // Optional: Add download prevention
-        headers.set("X-Content-Type-Options", "nosniff");
+        headers.set("Cache-Control", "public, max-age=3600");
         
         if (range && object.range) {
           headers.set("Content-Range", 
@@ -153,17 +202,22 @@ export default {
         
       } catch (error) {
         console.error("Stream Error:", error);
-        return new Response("Stream error", { status: 500, headers: corsHeaders });
+        return new Response("Stream error", { 
+          status: 500, 
+          headers: corsHeaders 
+        });
       }
     }
 
     // Default response
-    return new Response("Video Streaming API", { status: 200 });
+    return new Response("Video Streaming API v1.0", { 
+      status: 200, 
+      headers: { "Content-Type": "text/plain" } 
+    });
   }
 };
 
-// ==================== HELPER FUNCTIONS ====================
-
+// Helper functions tetap sama
 function jsonResponse(data, status = 200, corsHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
@@ -172,28 +226,6 @@ function jsonResponse(data, status = 200, corsHeaders = {}) {
       ...corsHeaders
     }
   });
-}
-
-async function generateSignature(data, secret) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    encoder.encode(data)
-  );
-  
-  // Convert to hex string
-  return Array.from(new Uint8Array(signature))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 function parseRange(range) {
