@@ -1,0 +1,36 @@
+{
+  "name": "harch-video-player",
+  "version": "1.0.0",
+  "description": "Secure Video Player for Harch Short",
+  "main": "app.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "jest",
+    "lint": "eslint .",
+    "build": "npm run build:worker && npm run build:app",
+    "build:worker": "esbuild video-api-worker.js --bundle --outfile=dist/worker.js --platform=node",
+    "build:app": "terser app.js -o dist/app.min.js --compress --mangle",
+    "security-check": "node security-audit.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20231121.0",
+    "esbuild": "^0.19.5",
+    "jest": "^29.7.0",
+    "terser": "^5.24.0",
+    "wrangler": "^3.18.0",
+    "eslint": "^8.54.0"
+  },
+  "keywords": [
+    "video-player",
+    "telegram",
+    "security",
+    "cloudflare",
+    "supabase"
+  ],
+  "author": "Harch Team",
+  "license": "MIT"
+}
