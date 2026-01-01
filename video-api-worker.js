@@ -103,11 +103,23 @@ export default {
 
         if (!code) return json({ error: "invalid code" }, 400);
 
-        const videos = await supabaseQuery(
-          `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_url,category,title,description`
-        );
+        // 🔍 DEBUG: Log query
+        const query = `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_url,category,title,description`;
+        console.log("Querying Supabase:", query);
 
-        if (!videos.length) return json({ error: "not found" }, 404);
+        const videos = await supabaseQuery(query);
+        
+        // 🔍 DEBUG: Log result
+        console.log("Query result:", videos);
+
+        if (!videos.length) {
+          console.error("Video not found for code:", code);
+          return json({ 
+            error: "not found", 
+            code: code,
+            hint: "Check if this code exists in Supabase videos table"
+          }, 404);
+        }
 
         const video = videos[0];
 
@@ -156,16 +168,20 @@ export default {
       try {
         const token = url.searchParams.get("token");
         if (!token) {
+          console.error("No token provided");
           return new Response("Forbidden", { status: 403, headers: cors });
         }
 
         const payload = await verifyToken(token);
         if (!payload) {
+          console.error("Invalid or expired token");
           return new Response("Token invalid/expired", {
             status: 403,
             headers: cors
           });
         }
+
+        console.log("Token verified, path:", payload.path);
 
         // 🔧 FIX: Parse range request dengan benar
         const rangeHeader = request.headers.get("Range");
@@ -173,16 +189,21 @@ export default {
         
         if (rangeHeader) {
           range = parseRange(rangeHeader);
+          console.log("Range request:", range);
         }
 
         // 🔧 FIX: Fetch dari R2 dengan proper range
+        console.log("Fetching from R2:", payload.path);
         const object = await env.R2_BUCKET.get(payload.path, 
           range ? { range } : undefined
         );
 
         if (!object) {
+          console.error("File not found in R2:", payload.path);
           return new Response("Not Found", { status: 404, headers: cors });
         }
+
+        console.log("File found, size:", object.size);
 
         const headers = new Headers(cors);
 
