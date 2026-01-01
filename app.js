@@ -8,12 +8,8 @@ class VideoPlayerApp {
         // Initialize elements
         this.initializeElements();
         
-        // Get deep link code
         // Get deep link code (URL ?code= OR Telegram startapp)
-    this.deepLinkCode =
-        this.getUrlParameter('code') ||
-        this.getTelegramStartParam();
-
+        this.deepLinkCode = this.getUrlParameter('code') || this.getTelegramStartParam();
         
         // Initialize player
         if (!this.deepLinkCode) {
@@ -25,10 +21,12 @@ class VideoPlayerApp {
         
         // State variables
         this.isVideoPlaying = false;
-        this.isControlsVisible = false; // Start hidden
+        this.isControlsVisible = false;
         this.controlsTimeout = null;
         this.videoDuration = 0;
         this.lastVolume = 0.7;
+        this.retryCount = 0;
+        this.maxRetries = 3;
         
         // Initialize with controls hidden
         this.hideControls();
@@ -41,10 +39,14 @@ class VideoPlayerApp {
     }
 
     getTelegramStartParam() {
-        if (window.Telegram && window.Telegram.WebApp) {
-            const tg = window.Telegram.WebApp;
-            tg.ready();
-            return tg.initDataUnsafe?.start_param || null;
+        try {
+            if (window.Telegram && window.Telegram.WebApp) {
+                const tg = window.Telegram.WebApp;
+                tg.ready();
+                return tg.initDataUnsafe?.start_param || null;
+            }
+        } catch (error) {
+            console.error('Error getting Telegram start param:', error);
         }
         return null;
     }
@@ -126,6 +128,8 @@ class VideoPlayerApp {
     
     // Add security to video player
     addVideoSecurity() {
+        if (!this.videoPlayer) return;
+        
         // Prevent video context menu
         this.videoPlayer.addEventListener('contextmenu', (e) => {
             e.preventDefault();
@@ -145,18 +149,51 @@ class VideoPlayerApp {
         });
     }
     
-    // Initialize player with API call
+    // Initialize player with API call - IMPROVED
     async initializePlayer() {
         try {
-            // Fetch video data from backend API
-            const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
-            const response = await fetch(`${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}`);
+            this.loadingIndicator.style.display = 'flex';
+            this.errorMessage.style.display = 'none';
             
+            // Fetch video data from backend API with timeout
+            const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+            
+            const response = await fetch(`${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            // Handle HTTP errors
             if (!response.ok) {
-                throw new Error('Video not found');
+                if (response.status === 404) {
+                    throw new Error('Video not found. Please check your video code.');
+                } else if (response.status === 403) {
+                    throw new Error('Access denied. You do not have permission to view this video.');
+                } else if (response.status === 500) {
+                    throw new Error('Server error. Please try again later.');
+                } else {
+                    throw new Error(`Error ${response.status}: Failed to load video data.`);
+                }
             }
             
+            // Parse JSON response
             const data = await response.json();
+            
+            // Validate response data
+            if (!data || typeof data !== 'object') {
+                throw new Error('Invalid response format from server.');
+            }
+            
+            if (!data.video_url) {
+                throw new Error('Video URL not found in response.');
+            }
             
             // Update UI with video metadata
             this.updateVideoMetadata(data);
@@ -167,22 +204,72 @@ class VideoPlayerApp {
             // Setup event listeners for enhanced UI
             this.setupEventListeners();
             
+            // Reset retry count on success
+            this.retryCount = 0;
+            
         } catch (error) {
             console.error('Error fetching video data:', error);
-            this.showError('Failed to load video data. Please try again later.');
-            document.getElementById('loadingIndicator').style.display = 'none';
+            
+            // Handle specific error types
+            let errorMessage = 'Failed to load video. Please try again.';
+            
+            if (error.name === 'AbortError') {
+                errorMessage = 'Request timeout. Please check your internet connection.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            
+            this.showError(errorMessage);
+            this.loadingIndicator.style.display = 'none';
+            
+            // Show retry button
+            if (this.retryButton) {
+                this.retryButton.style.display = 'inline-block';
+            }
         }
     }
     
-    // Update video metadata
+    // Update video metadata - IMPROVED
     updateVideoMetadata(data) {
-        this.videoTitle.textContent = data.title || 'Untitled';
-        this.overlayTitle.textContent = data.title || 'Untitled';
-        this.videoDescription.textContent = data.description || '';
+        // Update title
+        const title = data.title || 'Untitled Video';
+        if (this.videoTitle) {
+            this.videoTitle.textContent = title;
+        }
+        if (this.overlayTitle) {
+            this.overlayTitle.textContent = title;
+        }
+        
+        // Update description
+        const description = data.description || '';
+        if (this.videoDescription) {
+            this.videoDescription.textContent = description;
+            // Hide description container if empty
+            if (!description) {
+                this.videoDescription.style.display = 'none';
+            }
+        }
+        
+        // Update page title
+        document.title = title + ' - Harch Short';
     }
     
-    // Set video source with security
+    // Set video source with security - IMPROVED
     setVideoSource(videoUrl) {
+        if (!this.videoPlayer) {
+            console.error('Video player element not found');
+            return;
+        }
+        
+        // Validate video URL
+        try {
+            new URL(videoUrl);
+        } catch (error) {
+            console.error('Invalid video URL:', videoUrl);
+            this.showError('Invalid video URL. Please contact support.');
+            return;
+        }
+        
         this.videoPlayer.src = videoUrl;
         
         // Set security attributes
@@ -195,10 +282,15 @@ class VideoPlayerApp {
         
         // Ensure video player is not using native controls
         this.videoPlayer.controls = false;
+        
+        // Load the video
+        this.videoPlayer.load();
     }
     
     // Setup event listeners for enhanced UI
     setupEventListeners() {
+        if (!this.videoPlayer) return;
+        
         // Video events
         this.videoPlayer.addEventListener('loadeddata', this.handleVideoLoaded.bind(this));
         this.videoPlayer.addEventListener('canplay', this.handleVideoCanPlay.bind(this));
@@ -209,48 +301,71 @@ class VideoPlayerApp {
         this.videoPlayer.addEventListener('error', this.handleVideoError.bind(this));
         this.videoPlayer.addEventListener('volumechange', this.handleVolumeChange.bind(this));
         this.videoPlayer.addEventListener('waiting', this.handleVideoWaiting.bind(this));
+        this.videoPlayer.addEventListener('loadstart', () => {
+            this.loadingIndicator.style.display = 'flex';
+        });
         
         // Control button events
-        this.playPauseButton.addEventListener('click', this.togglePlayPause.bind(this));
-        this.fullscreenButton.addEventListener('click', this.toggleFullscreen.bind(this));
-        this.rewindButton.addEventListener('click', this.rewindVideo.bind(this));
-        this.forwardButton.addEventListener('click', this.forwardVideo.bind(this));
-        this.retryButton.addEventListener('click', this.retryLoading.bind(this));
-        this.backButton.addEventListener('click', this.goBack.bind(this));
+        if (this.playPauseButton) {
+            this.playPauseButton.addEventListener('click', this.togglePlayPause.bind(this));
+        }
+        if (this.fullscreenButton) {
+            this.fullscreenButton.addEventListener('click', this.toggleFullscreen.bind(this));
+        }
+        if (this.rewindButton) {
+            this.rewindButton.addEventListener('click', this.rewindVideo.bind(this));
+        }
+        if (this.forwardButton) {
+            this.forwardButton.addEventListener('click', this.forwardVideo.bind(this));
+        }
+        if (this.retryButton) {
+            this.retryButton.addEventListener('click', this.retryLoading.bind(this));
+        }
+        if (this.backButton) {
+            this.backButton.addEventListener('click', this.goBack.bind(this));
+        }
         
-        // Progress bar events - FIXED
-        this.progressContainer.addEventListener('click', this.seekToPosition.bind(this));
+        // Progress bar events
+        if (this.progressContainer) {
+            this.progressContainer.addEventListener('click', this.seekToPosition.bind(this));
+        }
         
         // Volume control events
-        this.volumeSlider.addEventListener('input', this.adjustVolume.bind(this));
+        if (this.volumeSlider) {
+            this.volumeSlider.addEventListener('input', this.adjustVolume.bind(this));
+        }
         
-        // Video player click events - FIXED
+        // Video player click events
         this.videoPlayer.addEventListener('click', () => {
             this.togglePlayPause();
             this.showControls();
         });
         
-        // Video container hover events - FIXED
-        this.videoContainer.addEventListener('mouseenter', () => {
-            this.showControls();
-        });
-        
-        this.videoContainer.addEventListener('mouseleave', () => {
-            if (this.isVideoPlaying) {
+        // Video container hover events
+        if (this.videoContainer) {
+            this.videoContainer.addEventListener('mouseenter', () => {
+                this.showControls();
+            });
+            
+            this.videoContainer.addEventListener('mouseleave', () => {
+                if (this.isVideoPlaying) {
+                    this.hideControlsAfterDelay();
+                }
+            });
+            
+            // Touch events for mobile
+            this.videoContainer.addEventListener('touchstart', () => {
+                this.showControls();
                 this.hideControlsAfterDelay();
-            }
-        });
-        
-        // Touch events for mobile
-        this.videoContainer.addEventListener('touchstart', () => {
-            this.showControls();
-            this.hideControlsAfterDelay();
-        });
+            });
+        }
         
         // Control overlay click - prevent video click
-        this.controlsOverlay.addEventListener('click', (e) => {
-            e.stopPropagation();
-        });
+        if (this.controlsOverlay) {
+            this.controlsOverlay.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
         
         // Fullscreen events
         document.addEventListener('fullscreenchange', this.handleFullscreenChange.bind(this));
@@ -318,7 +433,9 @@ class VideoPlayerApp {
         
         // Set initial volume
         this.videoPlayer.volume = this.lastVolume;
-        this.volumeSlider.value = this.lastVolume;
+        if (this.volumeSlider) {
+            this.volumeSlider.value = this.lastVolume;
+        }
         
         // Show controls briefly when video is ready
         this.showControls();
@@ -331,19 +448,20 @@ class VideoPlayerApp {
     
     handleVideoPlaying() {
         this.isVideoPlaying = true;
-        this.playIcon.style.display = 'none';
-        this.pauseIcon.style.display = 'block';
+        if (this.playIcon) this.playIcon.style.display = 'none';
+        if (this.pauseIcon) this.pauseIcon.style.display = 'block';
+        this.loadingIndicator.style.display = 'none';
         this.hideControlsAfterDelay();
     }
     
     handleVideoPause() {
         this.isVideoPlaying = false;
-        this.playIcon.style.display = 'block';
-        this.pauseIcon.style.display = 'none';
+        if (this.playIcon) this.playIcon.style.display = 'block';
+        if (this.pauseIcon) this.pauseIcon.style.display = 'none';
     }
     
     handleTimeUpdate() {
-        if (this.videoDuration) {
+        if (this.videoDuration && this.progressBar) {
             const progressPercent = (this.videoPlayer.currentTime / this.videoDuration) * 100;
             this.progressBar.style.width = `${progressPercent}%`;
             this.updateCurrentTimeDisplay();
@@ -352,15 +470,35 @@ class VideoPlayerApp {
     
     handleVideoEnded() {
         this.isVideoPlaying = false;
-        this.playIcon.style.display = 'block';
-        this.pauseIcon.style.display = 'none';
+        if (this.playIcon) this.playIcon.style.display = 'block';
+        if (this.pauseIcon) this.pauseIcon.style.display = 'none';
         this.showControls();
     }
     
     handleVideoError() {
         this.loadingIndicator.style.display = 'none';
-        this.showError('Failed to load video. Please try again later.');
-        console.error('Video error:', this.videoPlayer.error);
+        const error = this.videoPlayer.error;
+        let errorMessage = 'Failed to load video. Please try again.';
+        
+        if (error) {
+            switch (error.code) {
+                case error.MEDIA_ERR_ABORTED:
+                    errorMessage = 'Video playback was aborted.';
+                    break;
+                case error.MEDIA_ERR_NETWORK:
+                    errorMessage = 'Network error occurred while loading video.';
+                    break;
+                case error.MEDIA_ERR_DECODE:
+                    errorMessage = 'Video decoding error. The video format may not be supported.';
+                    break;
+                case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                    errorMessage = 'Video format not supported or video not found.';
+                    break;
+            }
+        }
+        
+        this.showError(errorMessage);
+        console.error('Video error:', error);
     }
     
     handleVideoWaiting() {
@@ -370,7 +508,9 @@ class VideoPlayerApp {
     }
     
     handleVolumeChange() {
-        this.volumeSlider.value = this.videoPlayer.volume;
+        if (this.volumeSlider) {
+            this.volumeSlider.value = this.videoPlayer.volume;
+        }
         this.lastVolume = this.videoPlayer.volume;
     }
     
@@ -381,12 +521,14 @@ class VideoPlayerApp {
     // ========== CONTROL FUNCTIONS ==========
     
     togglePlayPause() {
+        if (!this.videoPlayer) return;
+        
         if (this.videoPlayer.paused || this.videoPlayer.ended) {
             this.videoPlayer.play()
                 .then(() => {
                     this.isVideoPlaying = true;
-                    this.playIcon.style.display = 'none';
-                    this.pauseIcon.style.display = 'block';
+                    if (this.playIcon) this.playIcon.style.display = 'none';
+                    if (this.pauseIcon) this.pauseIcon.style.display = 'block';
                 })
                 .catch(error => {
                     console.error('Error playing video:', error);
@@ -395,12 +537,14 @@ class VideoPlayerApp {
         } else {
             this.videoPlayer.pause();
             this.isVideoPlaying = false;
-            this.playIcon.style.display = 'block';
-            this.pauseIcon.style.display = 'none';
+            if (this.playIcon) this.playIcon.style.display = 'block';
+            if (this.pauseIcon) this.pauseIcon.style.display = 'none';
         }
     }
     
     toggleFullscreen() {
+        if (!this.videoContainer) return;
+        
         if (!document.fullscreenElement && 
             !document.webkitFullscreenElement && 
             !document.mozFullScreenElement) {
@@ -426,11 +570,13 @@ class VideoPlayerApp {
     }
     
     rewindVideo() {
+        if (!this.videoPlayer) return;
         this.videoPlayer.currentTime = Math.max(0, this.videoPlayer.currentTime - 10);
         this.showControls();
     }
     
     forwardVideo() {
+        if (!this.videoPlayer) return;
         this.videoPlayer.currentTime = Math.min(
             this.videoDuration, 
             this.videoPlayer.currentTime + 10
@@ -439,6 +585,7 @@ class VideoPlayerApp {
     }
     
     toggleMute() {
+        if (!this.videoPlayer) return;
         this.videoPlayer.muted = !this.videoPlayer.muted;
         if (this.videoPlayer.muted) {
             this.lastVolume = this.videoPlayer.volume;
@@ -450,21 +597,25 @@ class VideoPlayerApp {
     }
     
     increaseVolume() {
+        if (!this.videoPlayer) return;
         this.videoPlayer.volume = Math.min(1, this.videoPlayer.volume + 0.1);
         this.showVolumeControl();
     }
     
     decreaseVolume() {
+        if (!this.videoPlayer) return;
         this.videoPlayer.volume = Math.max(0, this.videoPlayer.volume - 0.1);
         this.showVolumeControl();
     }
     
     adjustVolume() {
+        if (!this.videoPlayer || !this.volumeSlider) return;
         this.videoPlayer.volume = this.volumeSlider.value;
         this.showVolumeControl();
     }
     
     showVolumeControl() {
+        if (!this.volumeContainer) return;
         // Show volume control temporarily
         this.volumeContainer.style.display = 'block';
         clearTimeout(this.volumeContainer.timeout);
@@ -474,9 +625,17 @@ class VideoPlayerApp {
     }
     
     retryLoading() {
+        if (this.retryCount >= this.maxRetries) {
+            this.showError('Maximum retry attempts reached. Please refresh the page.');
+            return;
+        }
+        
+        this.retryCount++;
         this.errorMessage.style.display = 'none';
         this.loadingIndicator.style.display = 'flex';
-        this.videoPlayer.load();
+        
+        // Retry initialization
+        this.initializePlayer();
     }
     
     goBack() {
@@ -486,10 +645,13 @@ class VideoPlayerApp {
             window.history.back();
         } else {
             console.log('No previous page in history');
+            // Optional: redirect to home page
+            // window.location.href = '/';
         }
     }
     
     seekToPosition(e) {
+        if (!this.videoPlayer || !this.progressContainer) return;
         const rect = this.progressContainer.getBoundingClientRect();
         const pos = (e.clientX - rect.left) / rect.width;
         this.videoPlayer.currentTime = pos * this.videoDuration;
@@ -499,6 +661,7 @@ class VideoPlayerApp {
     // ========== UI UPDATE FUNCTIONS ==========
     
     updateCurrentTimeDisplay() {
+        if (!this.currentTimeDisplay || !this.videoPlayer) return;
         const currentTime = this.videoPlayer.currentTime;
         const minutes = Math.floor(currentTime / 60);
         const seconds = Math.floor(currentTime % 60);
@@ -506,20 +669,26 @@ class VideoPlayerApp {
     }
     
     updateDurationDisplay() {
+        if (!this.durationDisplay) return;
         const minutes = Math.floor(this.videoDuration / 60);
         const seconds = Math.floor(this.videoDuration % 60);
         this.durationDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
     }
     
     showError(message) {
-        this.errorText.textContent = message;
-        this.errorMessage.style.display = 'block';
+        if (this.errorText) {
+            this.errorText.textContent = message;
+        }
+        if (this.errorMessage) {
+            this.errorMessage.style.display = 'block';
+        }
         this.loadingIndicator.style.display = 'none';
     }
     
     // ========== CONTROLS VISIBILITY ==========
     
     showControls() {
+        if (!this.controlsOverlay) return;
         this.controlsOverlay.classList.add('show-controls');
         this.isControlsVisible = true;
         
@@ -532,6 +701,7 @@ class VideoPlayerApp {
     }
     
     hideControls() {
+        if (!this.controlsOverlay) return;
         if (this.isVideoPlaying) {
             this.controlsOverlay.classList.remove('show-controls');
             this.isControlsVisible = false;
