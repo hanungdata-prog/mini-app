@@ -292,8 +292,7 @@ class VideoPlayerApp {
         this.volumeSlider = document.getElementById('volumeSlider');
         this.volumeContainer = document.getElementById('volumeContainer');
 
-        // Initialize Video.js player
-        this.videoPlayer = null;
+        this.videoPlayer = document.getElementById('videoPlayer');
         
         this.addVideoSecurity();
     }
@@ -444,7 +443,7 @@ class VideoPlayerApp {
     }
     
     setVideoSource(videoUrl) {
-      if (!document.getElementById('videoPlayer')) return;
+      if (!this.videoPlayer) return;
 
       // ✅ FIX: support relative URL
       let finalUrl;
@@ -458,57 +457,34 @@ class VideoPlayerApp {
         return;
       }
 
-      // Destroy existing Video.js player if it exists
-      if (this.videoPlayer) {
-        this.videoPlayer.dispose();
-      }
-
       // Set the source on the video element
-      const videoElement = document.getElementById('videoPlayer');
-      videoElement.src = finalUrl;
+      this.videoPlayer.src = finalUrl;
 
-      // Initialize Video.js player with enhanced options
-      this.videoPlayer = videojs(videoElement, {
-        controls: false, // We'll use custom controls
-        autoplay: false,
-        preload: 'metadata',
-        playbackRates: [0.5, 1, 1.25, 1.5, 2],
-        responsive: true,
-        fluid: true,
-        html5: {
-          vhs: {
-            overrideNative: true
-          },
-          nativeVideoTracks: false,
-          nativeAudioTracks: false,
-          nativeTextTracks: false
-        },
-        plugins: {
-          // Add any additional plugins if needed
-        }
-      });
+      // Set additional attributes for better compatibility
+      this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
+      this.videoPlayer.disableRemotePlayback = true;
+      this.videoPlayer.setAttribute('preload', 'metadata');
+      this.videoPlayer.setAttribute('playsinline', 'true');
+      this.videoPlayer.setAttribute('webkit-playsinline', 'true');
+      this.videoPlayer.setAttribute('crossorigin', 'anonymous'); // For better CORS handling
 
-      // Disable download and other features
-      videoElement.setAttribute('controlsList', 'nodownload noplaybackrate');
-      videoElement.disableRemotePlayback = true;
-      videoElement.setAttribute('playsinline', 'true');
-      videoElement.setAttribute('webkit-playsinline', 'true');
+      // Remove any existing source elements and add the new one
+      this.videoPlayer.load();
     }  
     // ========== EVENT LISTENERS (abbreviated for space) ==========
     
     setupEventListeners() {
         if (!this.videoPlayer) return;
 
-        // Video.js event listeners
-        this.videoPlayer.on('loadeddata', this.handleVideoLoaded.bind(this));
-        this.videoPlayer.on('canplay', this.handleVideoCanPlay.bind(this));
-        this.videoPlayer.on('playing', this.handleVideoPlaying.bind(this));
-        this.videoPlayer.on('pause', this.handleVideoPause.bind(this));
-        this.videoPlayer.on('timeupdate', this.handleTimeUpdate.bind(this));
-        this.videoPlayer.on('ended', this.handleVideoEnded.bind(this));
-        this.videoPlayer.on('error', this.handleVideoError.bind(this));
-        this.videoPlayer.on('volumechange', this.handleVolumeChange.bind(this));
-        this.videoPlayer.on('waiting', this.handleVideoWaiting.bind(this));
+        this.videoPlayer.addEventListener('loadeddata', this.handleVideoLoaded.bind(this));
+        this.videoPlayer.addEventListener('canplay', this.handleVideoCanPlay.bind(this));
+        this.videoPlayer.addEventListener('playing', this.handleVideoPlaying.bind(this));
+        this.videoPlayer.addEventListener('pause', this.handleVideoPause.bind(this));
+        this.videoPlayer.addEventListener('timeupdate', this.handleTimeUpdate.bind(this));
+        this.videoPlayer.addEventListener('ended', this.handleVideoEnded.bind(this));
+        this.videoPlayer.addEventListener('error', this.handleVideoError.bind(this));
+        this.videoPlayer.addEventListener('volumechange', this.handleVolumeChange.bind(this));
+        this.videoPlayer.addEventListener('waiting', this.handleVideoWaiting.bind(this));
 
         if (this.playPauseButton) {
             this.playPauseButton.addEventListener('click', this.togglePlayPause.bind(this));
@@ -534,7 +510,7 @@ class VideoPlayerApp {
             this.volumeSlider.addEventListener('input', this.adjustVolume.bind(this));
         }
 
-        this.videoPlayer.on('click', () => {
+        this.videoPlayer.addEventListener('click', () => {
             this.togglePlayPause();
             this.showControls();
         });
@@ -967,10 +943,10 @@ class VideoPlayerApp {
         // Clear encrypted URL
         this.encryptedVideoUrl = null;
 
-        // Dispose of Video.js player to prevent memory leaks
+        // Clear video source
         if (this.videoPlayer) {
-            this.videoPlayer.dispose();
-            this.videoPlayer = null;
+            this.videoPlayer.src = '';
+            this.videoPlayer.load();
         }
     }
 }
