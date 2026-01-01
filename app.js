@@ -440,120 +440,33 @@ class VideoPlayerApp {
         document.title = title + ' - Harch Short';
     }
     
-// ✅ FIXED: Replace your setVideoSource function with this
-// ✅ FIXED: Replace your setVideoSource function with this
-setVideoSource(videoUrl) {
-  if (!this.videoPlayer) return;
+    setVideoSource(videoUrl) {
+      if (!this.videoPlayer) return;
 
-  // ✅ Pastikan URL valid
-  let finalUrl = videoUrl;
-  
-  // Jika URL relative, buat jadi absolute
-  if (!videoUrl.startsWith('http')) {
-    try {
-      finalUrl = new URL(videoUrl, window.location.origin).href;
-    } catch (e) {
-      console.error('Invalid video URL:', videoUrl);
-      this.showError('Invalid video stream URL.');
-      return;
-    }
-  }
+      // ✅ FIX: support relative URL
+      let finalUrl;
+      try {
+        finalUrl = videoUrl.startsWith('http')
+          ? videoUrl
+          : new URL(videoUrl, window.location.origin).href;
+      } catch (e) {
+        console.error('Invalid video URL:', videoUrl);
+        this.showError('Invalid video stream URL.');
+        return;
+      }
 
-  console.log('🎬 Setting video source:', finalUrl);
+      this.videoPlayer.src = finalUrl;
 
-  // ✅ CRITICAL: Remove old event listeners to prevent multiple calls
-  const oldVideo = this.videoPlayer;
-  const newVideo = oldVideo.cloneNode(true);
-  oldVideo.parentNode.replaceChild(newVideo, oldVideo);
-  this.videoPlayer = newVideo;
+      this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
+      this.videoPlayer.disableRemotePlayback = true;
+      this.videoPlayer.setAttribute('preload', 'metadata');
+      this.videoPlayer.setAttribute('playsinline', 'true');
+      this.videoPlayer.setAttribute('webkit-playsinline', 'true');
 
-  // ✅ Set attributes DULU sebelum set src
-  this.videoPlayer.setAttribute('controlsList', 'nodownload noplaybackrate');
-  this.videoPlayer.setAttribute('preload', 'auto');
-  this.videoPlayer.setAttribute('playsinline', 'true');
-  this.videoPlayer.setAttribute('webkit-playsinline', 'true');
-  this.videoPlayer.disableRemotePlayback = true;
-  this.videoPlayer.controls = false;
-
-  // ✅ Re-setup event listeners on new video element
-  this.setupVideoEventListeners();
-
-  // ✅ PENTING: Set src langsung TANPA setTimeout
-  this.videoPlayer.src = finalUrl;
-  
-  // ✅ Trigger load
-  this.videoPlayer.load();
-}
-
-// ✅ NEW: Separate function for video event listeners only
-setupVideoEventListeners() {
-  if (!this.videoPlayer) return;
-
-  // Clear any existing listeners by using new element reference
-  this.videoPlayer.addEventListener('loadeddata', this.handleVideoLoaded.bind(this));
-  this.videoPlayer.addEventListener('canplay', this.handleVideoCanPlay.bind(this));
-  this.videoPlayer.addEventListener('playing', this.handleVideoPlaying.bind(this));
-  this.videoPlayer.addEventListener('pause', this.handleVideoPause.bind(this));
-  this.videoPlayer.addEventListener('timeupdate', this.handleTimeUpdate.bind(this));
-  this.videoPlayer.addEventListener('ended', this.handleVideoEnded.bind(this));
-  this.videoPlayer.addEventListener('error', this.handleVideoError.bind(this));
-  this.videoPlayer.addEventListener('volumechange', this.handleVolumeChange.bind(this));
-  this.videoPlayer.addEventListener('waiting', this.handleVideoWaiting.bind(this));
-
-  // Click to play/pause
-  this.videoPlayer.addEventListener('click', () => {
-    this.togglePlayPause();
-    this.showControls();
-  });
-}
-
-handleVideoError() {
-  // Prevent multiple error handlers
-  if (this.isHandlingError) {
-    console.log('Already handling error, skipping...');
-    return;
-  }
-  this.isHandlingError = true;
-
-  this.loadingIndicator.style.display = 'none';
-  const error = this.videoPlayer.error;
-  
-  console.error('❌ Video Error:', {
-    code: error?.code,
-    message: error?.message,
-    src: this.videoPlayer.src,
-    networkState: this.videoPlayer.networkState,
-    readyState: this.videoPlayer.readyState
-  });
-
-  let errorMessage = 'Failed to load video. Please try again.';
-  
-  if (error) {
-    switch (error.code) {
-      case 1: // MEDIA_ERR_ABORTED
-        errorMessage = 'Video loading was aborted.';
-        break;
-      case 2: // MEDIA_ERR_NETWORK
-        errorMessage = 'Network error. Please check your connection.';
-        break;
-      case 3: // MEDIA_ERR_DECODE
-        errorMessage = 'Video decoding failed. File may be corrupted.';
-        break;
-      case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
-        errorMessage = 'Video format not supported or file not accessible. Please check if the file exists in R2 bucket.';
-        break;
-    }
-  }
-  
-  this.showError(errorMessage);
-  
-  // Reset flag after 2 seconds
-  setTimeout(() => {
-    this.isHandlingError = false;
-  }, 2000);
-}
-    
-    // ========== EVENT LISTENERS ==========
+      this.videoPlayer.controls = false;
+      this.videoPlayer.load();
+    }  
+    // ========== EVENT LISTENERS (abbreviated for space) ==========
     
     setupEventListeners() {
         if (!this.videoPlayer) return;
@@ -733,7 +646,20 @@ handleVideoError() {
         let errorMessage = 'Failed to load video. Please try again.';
         
         if (error) {
-            console.log(error);
+            switch (error.code) {
+                case error.MEDIA_ERR_ABORTED:
+                    errorMessage = 'Video playback was aborted.';
+                    break;
+                case error.MEDIA_ERR_NETWORK:
+                    errorMessage = 'Network error occurred while loading video.';
+                    break;
+                case error.MEDIA_ERR_DECODE:
+                    errorMessage = 'Video decoding error.';
+                    break;
+                case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                    errorMessage = 'Video format not supported.';
+                    break;
+            }
         }
         
         this.showError(errorMessage);
@@ -1042,28 +968,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 5000);
     }
     
-    // HAPUS atau KOMENTARI kode ini karena tidak kompatibel dengan Telegram Web App
-    // Additional security: Prevent iframe embedding
+    // // Additional security: Prevent iframe embedding
     // if (window.self !== window.top) {
     //     window.top.location = window.self.location;
     // }
     
-    // Watermark protection (kondisional - hanya aktif jika bukan di Telegram Web App)
-    if (!window.Telegram?.WebApp) {
-        const observer = new MutationObserver((mutations) => {
-            mutations.forEach((mutation) => {
-                mutation.removedNodes.forEach((node) => {
-                    if (node.classList && node.classList.contains('watermark')) {
-                        // Reload page if watermark is removed
-                        location.reload();
-                    }
-                });
+    // Watermark protection
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.removedNodes.forEach((node) => {
+                if (node.classList && node.classList.contains('watermark')) {
+                    // Reload page if watermark is removed
+                    location.reload();
+                }
             });
         });
-        
-        const watermark = document.querySelector('.watermark');
-        if (watermark) {
-            observer.observe(watermark.parentNode, { childList: true });
-        }
+    });
+    
+    const watermark = document.querySelector('.watermark');
+    if (watermark) {
+        observer.observe(watermark.parentNode, { childList: true });
     }
 });
