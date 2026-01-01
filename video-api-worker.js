@@ -105,7 +105,7 @@ const supabaseQuery = async (path) => {
         if (!code) return json({ error: "invalid code" }, 400);
 
         const videos = await supabaseQuery(
-          `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_path,category,title,description`
+          `videos?deep_link_code=eq.${encodeURIComponent(code)}&select=video_url,category,title,description`
         );
 
 
@@ -132,7 +132,7 @@ const supabaseQuery = async (path) => {
 
         // 🔐 token 30 detik
         const token = await signToken({
-          path: video.video_path,
+          path: video.video_url,
           exp: Date.now() + 30_000
         });
 
