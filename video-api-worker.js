@@ -159,7 +159,7 @@ async function checkVipAccess(supabase, userId) {
             vip_expired: user.vip_status && (!vipExpired || vipExpired <= now),
             vip_expired_date: user.vip_expired_date,
             vip_package: user.vip_package,
-            message: isValidVip ? null : 'VIP membership required to watch this video'
+            message: isValidVip ? null : 'Diperlukan VIP untuk menonton video ini.'
         };
     } catch (error) {
         console.error('Error checking VIP access:', error);
