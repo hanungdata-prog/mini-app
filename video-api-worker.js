@@ -39,20 +39,7 @@ export default {
           }, 400, corsHeaders);
         }
 
-        console.log('📊 Checking environment variables...');
-        console.log('SUPABASE_URL exists:', !!env.SUPABASE_URL);
-        console.log('SUPABASE_ANON_KEY exists:', !!env.SUPABASE_ANON_KEY);
-        console.log('R2_BUCKET exists:', !!env.R2_BUCKET);
-        
-        if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
-          console.error('❌ Missing Supabase credentials');
-          return jsonResponse({ 
-            error: "Configuration error",
-            message: "Server is not properly configured"
-          }, 500, corsHeaders);
-        }
-
-        // Query Supabase dengan Anon Key
+        // Query Supabase
         const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?deep_link_code=eq.${cleanCode}&select=id,video_url,title,description,category,is_active`;
         
         console.log('📡 Querying Supabase:', dbUrl);
@@ -61,43 +48,19 @@ export default {
           headers: {
             "apikey": env.SUPABASE_ANON_KEY,
             "Authorization": `Bearer ${env.SUPABASE_ANON_KEY}`,
-            "Accept": "application/json",
-            "Content-Type": "application/json"
+            "Accept": "application/json"
           }
         });
 
         console.log('📊 Database response status:', dbResponse.status);
-        console.log('📊 Database response headers:', Object.fromEntries(dbResponse.headers.entries()));
         
         if (!dbResponse.ok) {
           const errorText = await dbResponse.text();
           console.error('❌ Database error response:', errorText);
           
-          // Test Supabase connection
-          const testUrl = `${env.SUPABASE_URL}/rest/v1/videos?limit=1`;
-          console.log('🧪 Testing Supabase connection:', testUrl);
-          
-          try {
-            const testResponse = await fetch(testUrl, {
-              headers: {
-                "apikey": env.SUPABASE_ANON_KEY,
-                "Authorization": `Bearer ${env.SUPABASE_ANON_KEY}`
-              }
-            });
-            console.log('🧪 Test connection status:', testResponse.status);
-          } catch (testError) {
-            console.error('🧪 Test connection failed:', testError);
-          }
-          
           return jsonResponse({ 
             error: "Database error",
-            message: "Cannot fetch video data",
-            debug: {
-              status: dbResponse.status,
-              statusText: dbResponse.statusText,
-              supabaseUrl: env.SUPABASE_URL ? 'Set' : 'Not set',
-              anonKey: env.SUPABASE_ANON_KEY ? 'Set' : 'Not set'
-            }
+            message: "Cannot fetch video data"
           }, 500, corsHeaders);
         }
 
@@ -114,8 +77,7 @@ export default {
         const video = videos[0];
         console.log('✅ Video found:', { 
           id: video.id, 
-          title: video.title,
-          video_url: video.video_url 
+          title: video.title
         });
         
         // Check if video is active
@@ -137,7 +99,7 @@ export default {
         }
         
         // Generate streaming URL
-        const streamUrl = `https://${url.hostname}/api/stream/${video.id}`;
+        const streamUrl = `https://${url.hostname}/api/stream/${encodeURIComponent(video.video_url)}`;
         
         console.log('🔗 Generated stream URL:', streamUrl);
         
@@ -150,69 +112,29 @@ export default {
         
       } catch (error) {
         console.error("❌ API Error:", error);
-        console.error("❌ Error stack:", error.stack);
         
         return jsonResponse({ 
           error: "Server error",
-          message: "An unexpected error occurred",
-          debug: {
-            message: error.message,
-            name: error.name
-          }
+          message: "An unexpected error occurred"
         }, 500, corsHeaders);
       }
     }
 
-    // ==================== API: STREAM VIDEO (SIMPLE) ====================
+    // ==================== API: STREAM VIDEO (DIRECT PATH) ====================
     if (url.pathname.startsWith("/api/stream/")) {
       try {
-        const videoId = url.pathname.replace("/api/stream/", "");
-        console.log('🎬 Stream request for video ID:', videoId);
+        // Get video path from URL (not ID)
+        const videoPath = decodeURIComponent(url.pathname.replace("/api/stream/", ""));
+        console.log('🎬 Stream request for video path:', videoPath);
         
-        if (!videoId || isNaN(videoId)) {
-          return new Response("Invalid video ID", { 
+        if (!videoPath) {
+          return new Response("Video path required", { 
             status: 400, 
             headers: corsHeaders 
           });
         }
 
-        // Get video path from database
-        const dbUrl = `${env.SUPABASE_URL}/rest/v1/videos?id=eq.${videoId}&select=video_url`;
-        
-        const dbResponse = await fetch(dbUrl, {
-          headers: {
-            "apikey": env.SUPABASE_ANON_KEY,
-            "Authorization": `Bearer ${env.SUPABASE_ANON_KEY}`
-          }
-        });
-
-        if (!dbResponse.ok) {
-          return new Response("Database error", { 
-            status: 500, 
-            headers: corsHeaders 
-          });
-        }
-
-        const videos = await dbResponse.json();
-        
-        if (!videos || videos.length === 0) {
-          return new Response("Video not found", { 
-            status: 404, 
-            headers: corsHeaders 
-          });
-        }
-
-        const videoPath = videos[0].video_url;
-        console.log('📁 Video path from DB:', videoPath);
-        
-        if (!env.R2_BUCKET) {
-          return new Response("Storage not configured", { 
-            status: 500, 
-            headers: corsHeaders 
-          });
-        }
-        
-        // Get from R2
+        // Get from R2 directly using path
         const object = await env.R2_BUCKET.get(videoPath);
         
         if (!object) {
@@ -245,13 +167,26 @@ export default {
       }
     }
 
+    // ==================== FALLBACK: TEST VIDEO ====================
+    if (url.pathname === "/api/test") {
+      return jsonResponse({
+        success: true,
+        title: "Test Video (Public)",
+        description: "This is a public test video",
+        stream_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+      }, 200, corsHeaders);
+    }
+
     // Default response
     return jsonResponse({ 
       message: "Video Streaming API v2.0",
       endpoints: {
         get_video: "/api/video?code=VIDEO_CODE",
-        stream: "/api/stream/VIDEO_ID"
-      }
+        test: "/api/test",
+        stream: "/api/stream/VIDEO_PATH"
+      },
+      status: "online",
+      time: new Date().toISOString()
     }, 200, corsHeaders);
   }
 };
@@ -274,7 +209,6 @@ function getVideoContentType(filename) {
     case 'webm': return 'video/webm';
     case 'ogg': return 'video/ogg';
     case 'mov': return 'video/quicktime';
-    case 'm3u8': return 'application/x-mpegURL';
     default: return 'video/mp4';
   }
 }
