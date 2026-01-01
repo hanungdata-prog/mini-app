@@ -9,38 +9,29 @@ class VideoPlayerApp {
         this.initializeElements();
         
         // Get deep link code (URL ?code= OR Telegram startapp)
-        this.deepLinkCode = this.getUrlParameter('code') || this.getTelegramStartParam();
+        let rawCode = this.getUrlParameter('code') || this.getTelegramStartParam();
         
-        // Validate and clean the code
-        if (this.deepLinkCode) {
-            const cleanedCode = this.validateVideoCode(this.deepLinkCode);
-            if (cleanedCode) {
-                this.deepLinkCode = cleanedCode;
-                console.log('Video code validated and cleaned:', this.deepLinkCode);
-            } else {
-                console.error('Invalid video code format:', this.deepLinkCode);
-                this.deepLinkCode = null;
-            }
-        }
+        // Validate and clean the code IMMEDIATELY
+        this.deepLinkCode = this.validateVideoCode(rawCode);
         
         // Get user ID from Telegram
         this.userId = this.getTelegramUserId();
         
         // Debug: Log the code
-        console.log('Deep link code:', this.deepLinkCode);
+        console.log('Raw code from URL:', rawCode);
+        console.log('Cleaned video code:', this.deepLinkCode);
         console.log('User ID:', this.userId);
         console.log('URL search:', window.location.search);
-        console.log('URL href:', window.location.href);
         console.log('Telegram available:', !!window.Telegram);
         
         // Update debug UI
-        this.updateDebugInfo('code', this.deepLinkCode || 'NONE');
+        this.updateDebugInfo('code', this.deepLinkCode || 'INVALID');
         this.updateDebugInfo('telegram', window.Telegram ? 'YES' : 'NO');
         
         // Initialize player
         if (!this.deepLinkCode) {
-            this.showError('No video code provided. Please access via Telegram bot.');
-            this.updateDebugInfo('status', 'NO CODE');
+            this.showError('Invalid video code. Please check your link and try again.');
+            this.updateDebugInfo('status', 'INVALID CODE');
             document.getElementById('loadingIndicator').style.display = 'none';
         } else {
             this.updateDebugInfo('status', 'Initializing...');
@@ -62,42 +53,41 @@ class VideoPlayerApp {
     
     // Get URL parameter - FIXED for Telegram WebApp
     getUrlParameter(name) {
-        // Try URL search params first
-        const urlParams = new URLSearchParams(window.location.search);
-        let param = urlParams.get(name);
-        
-        // Clean the parameter - remove hash and everything after it
-        if (param && param.includes('#')) {
-            param = param.split('#')[0];
-        }
-        
-        // If not found, try tgWebAppStartParam
-        if (!param) {
-            const tgMatch = window.location.href.match(/tgWebAppStartParam=([^&#]+)/);
-            if (tgMatch) {
-                param = tgMatch[1];
-            }
-        }
-        
-        // If still not found, try hash (but clean it)
-        if (!param && window.location.hash) {
-            const hash = window.location.hash.substring(1);
-            const hashParams = new URLSearchParams(hash);
-            param = hashParams.get(name);
+        try {
+            // Try URL search params first
+            const urlParams = new URLSearchParams(window.location.search);
+            let param = urlParams.get(name);
             
-            // Clean if contains tgWebAppData
-            if (param && param.includes('tgWebAppData')) {
-                param = param.split('tgWebAppData')[0].replace(/[#&]+$/, '');
+            // If found, return immediately (will be cleaned by validateVideoCode)
+            if (param) {
+                console.log(`Found '${name}' in search params:`, param);
+                return param;
             }
+            
+            // Try tgWebAppStartParam
+            param = urlParams.get('tgWebAppStartParam');
+            if (param) {
+                console.log(`Found tgWebAppStartParam:`, param);
+                return param;
+            }
+            
+            // Try from hash
+            if (window.location.hash) {
+                const hashPart = window.location.hash.substring(1);
+                // Look for start_param in hash
+                const match = hashPart.match(/start_param=([^&]+)/);
+                if (match) {
+                    console.log(`Found start_param in hash:`, match[1]);
+                    return match[1];
+                }
+            }
+            
+            console.log(`URL param '${name}' not found`);
+            return null;
+        } catch (error) {
+            console.error('Error parsing URL parameter:', error);
+            return null;
         }
-        
-        // Final cleanup - remove any trailing special characters
-        if (param) {
-            param = param.replace(/[#&?]+$/, '').trim();
-        }
-        
-        console.log(`Getting URL param '${name}':`, param);
-        return param;
     }
 
     getTelegramStartParam() {
@@ -106,29 +96,12 @@ class VideoPlayerApp {
                 const tg = window.Telegram.WebApp;
                 tg.ready();
                 
-                // Try multiple ways to get the start param
-                let startParam = tg.initDataUnsafe?.start_param || 
-                                tg.startParam || 
-                                null;
+                // Get start param from Telegram WebApp
+                const startParam = tg.initDataUnsafe?.start_param || 
+                                  tg.startParam || 
+                                  null;
                 
-                // Clean the parameter if it contains hash or special chars
-                if (startParam) {
-                    // Remove hash and everything after it
-                    if (startParam.includes('#')) {
-                        startParam = startParam.split('#')[0];
-                    }
-                    // Remove any URL encoded data
-                    if (startParam.includes('%')) {
-                        startParam = startParam.split('%')[0];
-                    }
-                    // Clean trailing special characters
-                    startParam = startParam.replace(/[#&?]+$/, '').trim();
-                }
-                
-                console.log('Telegram WebApp detected');
-                console.log('Start param (cleaned):', startParam);
-                console.log('Init data:', tg.initDataUnsafe);
-                
+                console.log('Telegram start_param (raw):', startParam);
                 return startParam;
             } else {
                 console.log('Telegram WebApp not available');
@@ -155,30 +128,60 @@ class VideoPlayerApp {
     
     // ========== UTILITY FUNCTIONS ==========
     
-    // Validate and clean video code
-    validateVideoCode(code) {
-        if (!code) return null;
-        
-        // Remove any hash fragments
-        code = code.split('#')[0];
-        
-        // Remove any URL parameters
-        code = code.split('?')[0];
-        code = code.split('&')[0];
-        
-        // Remove URL encoding artifacts
-        code = code.split('%')[0];
-        
-        // Remove special characters and whitespace
-        code = code.replace(/[^a-zA-Z0-9]/g, '').trim();
-        
-        // Validate format: 6-10 alphanumeric characters
-        const regex = /^[a-zA-Z0-9]{6,10}$/;
-        if (!regex.test(code)) {
-            console.warn('Invalid video code format:', code);
+    // Validate and clean video code - CRITICAL FUNCTION
+    validateVideoCode(rawCode) {
+        if (!rawCode) {
+            console.warn('validateVideoCode: No code provided');
             return null;
         }
         
+        console.log('validateVideoCode: Input =', rawCode);
+        
+        let code = String(rawCode);
+        
+        // Step 1: Remove everything after # (hash fragment)
+        if (code.includes('#')) {
+            code = code.split('#')[0];
+            console.log('validateVideoCode: After removing hash =', code);
+        }
+        
+        // Step 2: Remove everything after ? (query string)
+        if (code.includes('?')) {
+            code = code.split('?')[0];
+            console.log('validateVideoCode: After removing query =', code);
+        }
+        
+        // Step 3: Remove everything after & (parameter separator)
+        if (code.includes('&')) {
+            code = code.split('&')[0];
+            console.log('validateVideoCode: After removing ampersand =', code);
+        }
+        
+        // Step 4: Decode URL encoding if present
+        try {
+            if (code.includes('%')) {
+                code = decodeURIComponent(code.split('%')[0]);
+                console.log('validateVideoCode: After decoding =', code);
+            }
+        } catch (e) {
+            console.warn('validateVideoCode: URL decode failed, using as-is');
+        }
+        
+        // Step 5: Remove all non-alphanumeric characters
+        code = code.replace(/[^a-zA-Z0-9]/g, '');
+        console.log('validateVideoCode: After removing special chars =', code);
+        
+        // Step 6: Trim whitespace
+        code = code.trim();
+        
+        // Step 7: Validate format (6-10 alphanumeric characters)
+        const regex = /^[a-zA-Z0-9]{6,10}$/;
+        if (!regex.test(code)) {
+            console.error('validateVideoCode: Invalid format. Must be 6-10 alphanumeric characters. Got:', code);
+            return null;
+        }
+        
+        console.log('validateVideoCode: Final valid code =', code);
         return code;
     }
     
@@ -286,14 +289,19 @@ class VideoPlayerApp {
             this.loadingIndicator.style.display = 'flex';
             this.errorMessage.style.display = 'none';
             
-            console.log('Initializing player with code:', this.deepLinkCode);
-            console.log('User ID:', this.userId);
+            // DOUBLE CHECK: Ensure code is clean before API call
+            if (!this.deepLinkCode || !/^[a-zA-Z0-9]{6,10}$/.test(this.deepLinkCode)) {
+                throw new Error('Invalid video code format: ' + this.deepLinkCode);
+            }
+            
+            console.log('✓ Initializing player with VALIDATED code:', this.deepLinkCode);
+            console.log('✓ User ID:', this.userId);
             
             // Fetch video data from backend API with timeout
             const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
             const fullUrl = `${apiUrl}?code=${encodeURIComponent(this.deepLinkCode)}${this.userId ? '&user_id=' + this.userId : ''}`;
             
-            console.log('Fetching from:', fullUrl);
+            console.log('✓ API URL:', fullUrl);
             this.updateDebugInfo('api', 'Fetching...');
             this.updateDebugInfo('status', 'Loading API...');
             
@@ -310,8 +318,8 @@ class VideoPlayerApp {
             
             clearTimeout(timeoutId);
             
-            console.log('Response status:', response.status);
-            console.log('Response ok:', response.ok);
+            console.log('✓ Response status:', response.status);
+            console.log('✓ Response ok:', response.ok);
             
             this.updateDebugInfo('api', `Status: ${response.status}`);
             
