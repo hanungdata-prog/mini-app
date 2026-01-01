@@ -1,7 +1,7 @@
 export default {
   async fetch(request, env) {
     const cors = {
-      "Access-Control-Allow-Origin": "*", // Allow all origins for Telegram
+      "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Range, Accept, X-Requested-With, Authorization",
       "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length, Content-Type"
@@ -160,29 +160,22 @@ export default {
           }
         }
 
-        // Use r2_path from database if available
-        let pathForToken = video.r2_path;
-        
-        // If no r2_path, construct from title
-        if (!pathForToken) {
-          const folderName = video.title.replace(/\s+/g, '_').replace(/[^\w\-\.]/g, '_');
-          const partNumber = "001"; // Default part
-          pathForToken = `${folderName}/Bagian_${partNumber}_marked.mp4`;
-        }
+        // Use video_url from database
+        const pathForToken = video.video_url;
 
         console.log("Video record from Supabase:", JSON.stringify(video));
-        console.log("R2 path for token:", pathForToken);
+        console.log("video_url from database:", pathForToken);
 
         // Validate path
         if (!pathForToken || typeof pathForToken !== 'string' || pathForToken.trim() === '') {
-          console.error("Invalid path for token:", pathForToken);
-          return json({ error: "Invalid video path configuration" }, 500);
+          console.error("Invalid or missing video_url:", pathForToken);
+          return json({ error: "Video URL not configured in database" }, 500);
         }
 
         // Sign token with longer expiry for Telegram (5 minutes)
         const token = await signToken({
           path: pathForToken,
-          exp: Date.now() + 300_000 // 5 minutes for Telegram
+          exp: Date.now() + 300_000 // 5 minutes
         });
 
         return json({
@@ -252,7 +245,9 @@ export default {
           
           // Try filename match
           if (!object) {
-            const filenameMatch = list.objects.find(obj => obj.key.endsWith(`/${fileName}`) || obj.key === fileName);
+            const filenameMatch = list.objects.find(obj => 
+              obj.key.endsWith(`/${fileName}`) || obj.key === fileName
+            );
             if (filenameMatch) {
               console.log("Found filename match:", filenameMatch.key);
               object = await env.R2_BUCKET.get(filenameMatch.key, {
