@@ -302,37 +302,54 @@ class VideoPlayerApp {
 
         const video = this.videoPlayer;
 
-        // 🔥 CRITICAL FIX untuk Telegram WebView
+        // 🔥 FULL RESET
         video.pause();
         video.removeAttribute('src');
+        video.innerHTML = ''; // Clear any source tags
         video.load();
 
-        // ⚡ Attributes yang WAJIB untuk Telegram
+        // ⚡ Essential Telegram attributes
         video.setAttribute('playsinline', '');
         video.setAttribute('webkit-playsinline', '');
+        video.setAttribute('x5-playsinline', ''); // Tencent X5 WebView
+        video.setAttribute('x5-video-player-type', 'h5');
+        video.setAttribute('x5-video-player-fullscreen', 'false');
         video.setAttribute('x-webkit-airplay', 'deny');
         video.setAttribute('disablePictureInPicture', '');
         video.setAttribute('controlsList', 'nodownload');
         
-        // ❌ JANGAN pakai crossorigin di Telegram
+        // ❌ NO crossorigin
         video.removeAttribute('crossorigin');
         
-        // 🎯 Set preload strategy
-        video.preload = 'metadata';
+        // 🎯 Preload
+        video.preload = 'auto';
+        
+        // 🔊 Unmute (Telegram block muted autoplay)
+        video.muted = false;
+        video.volume = 0.7;
 
-        // ⏱️ Delay untuk Telegram WebView
+        // ⏱️ Set source dengan delay
         setTimeout(() => {
-            video.src = finalUrl;
+            // Try dengan type hint
+            const source = document.createElement('source');
+            source.src = finalUrl;
+            source.type = 'video/mp4; codecs="avc1.42E01E, mp4a.40.2"';
+            
+            video.appendChild(source);
             video.load();
             
-            // Auto-play setelah load (optional)
+            console.log('Video source set with codec hint');
+            
+            // Fallback: set direct src jika source tag gagal
             setTimeout(() => {
-                video.play().catch(err => {
-                    console.log('Autoplay prevented:', err);
-                    // Normal - user harus tap play
-                });
-            }, 500);
-        }, 100);
+                if (video.readyState === 0) {
+                    console.log('Source tag failed, trying direct src');
+                    video.innerHTML = '';
+                    video.src = finalUrl;
+                    video.load();
+                }
+            }, 1000);
+        }, 150);
     }
 
     
