@@ -221,30 +221,28 @@ export default {
         const range = request.headers.get("Range");
 
         // Fetch dari R2
-        const object = await env.R2_BUCKET.get(payload.path, {
+        let object = await env.R2_BUCKET.get(payload.path, {
           range: range ? parseRange(range) : undefined
         });
 
+        // Jika tidak ketemu, coba path alternatif
         if (!object) {
           console.error('Object not found in R2:', payload.path);
           
-          // Coba dengan underscore jika gagal
-          const altPath = payload.path.replace('Bagian_001', 'Bagian001');
+          // Coba dengan underscore jika gagal (Bagian_001 -> Bagian001)
+          const altPath = payload.path.replace(/Bagian_(\d+)/g, 'Bagian$1');
           console.log('Trying alternative path:', altPath);
           
-          const altObject = await env.R2_BUCKET.get(altPath, {
+          object = await env.R2_BUCKET.get(altPath, {
             range: range ? parseRange(range) : undefined
           });
           
-          if (!altObject) {
+          if (!object) {
             return new Response("Video file not found in storage", { 
               status: 404, 
               headers: cors 
             });
           }
-          
-          // Use alternative object
-          return streamObject(altObject, range, headers, cors);
         }
 
         console.log('R2 object found, size:', object.size);
@@ -288,7 +286,16 @@ export default {
       }
     }
 
-    return json({ error: "Not Found" }, 404);
+    // Fallback 404 dengan info path
+    console.log('404 - Path not found:', url.pathname);
+    return json({ 
+      error: "Not Found",
+      path: url.pathname,
+      available_endpoints: [
+        "/api/video?code=<CODE>",
+        "/api/video/stream?token=<TOKEN>"
+      ]
+    }, 404);
   }
 };
 
