@@ -1,4 +1,4 @@
-// app.js - Fixed for Telegram Mini App
+// app.js - Fixed for Telegram Mini App Video Playback
 
 class VideoPlayerApp {
     constructor() {
@@ -139,26 +139,27 @@ class VideoPlayerApp {
     validateVideoCode(rawCode) {
         if (!rawCode) return null;
         
-        let code = String(rawCode);
+        let code = String(rawCode).trim();
         
+        // Bersihkan URL fragments
         if (code.includes('#')) code = code.split('#')[0];
         if (code.includes('?')) code = code.split('?')[0];
         if (code.includes('&')) code = code.split('&')[0];
         
+        // Decode jika ada encoding
         try {
-            if (code.includes('%')) {
-                code = decodeURIComponent(code.split('%')[0]);
-            }
+            code = decodeURIComponent(code);
         } catch (e) {
-            // Silent fail
+            // Ignore
         }
         
-        code = code.replace(/[^a-zA-Z0-9]/g, '');
-        code = code.trim();
-        
-        const regex = /^[a-zA-Z0-9]{6,10}$/;
-        if (!regex.test(code)) return null;
+        const regex = /^[a-zA-Z0-9]{6,15}$/;
+        if (!regex.test(code)) {
+            console.error('Invalid code format:', code);
+            return null;
+        }
 
+        console.log('Valid code:', code);
         return code;
     }
     
@@ -170,14 +171,13 @@ class VideoPlayerApp {
             console.log('Deep Link Code:', this.deepLinkCode);
             console.log('User ID:', this.userId);
             
-            if (!this.deepLinkCode || !/^[a-zA-Z0-9]{6,10}$/.test(this.deepLinkCode)) {
+            if (!this.deepLinkCode || !/^[a-zA-Z0-9]{6,15}$/.test(this.deepLinkCode)) {
                 console.error('Invalid code format:', this.deepLinkCode);
                 throw new Error('Invalid video code format');
             }
             
-            // Use absolute URL to Cloudflare Workers
             const apiUrl = 'https://mini-app.dramachinaharch.workers.dev/api/video';
-            const fullUrl =`${apiUrl}?code=${this.deepLinkCode}` + (this.userId ? `&user_id=${this.userId}` : '');
+            const fullUrl = `${apiUrl}?code=${this.deepLinkCode}` + (this.userId ? `&user_id=${this.userId}` : '');
             
             this.updateDebugInfo('api', 'Fetching...');
             this.updateDebugInfo('status', 'Loading API...');
@@ -278,65 +278,78 @@ class VideoPlayerApp {
         document.title = title + ' - Harch Short';
     }
     
-setVideoSource(videoUrl) {
-    if (!this.videoPlayer) return;
+    setVideoSource(videoUrl) {
+        if (!this.videoPlayer) return;
 
-    let finalUrl;
-    try {
-        const cleanUrl = String(videoUrl).trim();
+        let finalUrl;
+        try {
+            const cleanUrl = String(videoUrl).trim();
 
-        if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
-            finalUrl = cleanUrl;
-        } else if (cleanUrl.startsWith('/')) {
-            finalUrl = 'https://mini-app.dramachinaharch.workers.dev' + cleanUrl;
-        } else {
-            finalUrl = 'https://mini-app.dramachinaharch.workers.dev/' + cleanUrl;
+            if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+                finalUrl = cleanUrl;
+            } else if (cleanUrl.startsWith('/')) {
+                finalUrl = 'https://mini-app.dramachinaharch.workers.dev' + cleanUrl;
+            } else {
+                finalUrl = 'https://mini-app.dramachinaharch.workers.dev/' + cleanUrl;
+            }
+        } catch (e) {
+            console.error('Invalid video URL:', videoUrl);
+            this.showError('Invalid video stream URL.');
+            return;
         }
-    } catch (e) {
-        console.error('Invalid video URL:', videoUrl);
-        this.showError('Invalid video stream URL.');
-        return;
-    }
 
-    console.log('Setting video source:', finalUrl);
+        console.log('Setting video source:', finalUrl);
 
-    const video = this.videoPlayer;
+        const video = this.videoPlayer;
 
-    // 🔒 RESET dulu (penting untuk Telegram)
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-
-    // 🎯 Attribute yang paling stabil di Telegram
-    video.setAttribute('preload', 'metadata');
-    video.setAttribute('playsinline', 'true');
-    video.setAttribute('webkit-playsinline', 'true');
-    video.setAttribute('controlsList', 'nodownload noplaybackrate');
-    video.setAttribute('disableRemotePlayback', 'true');
-    video.setAttribute('x-webkit-airplay', 'deny');
-
-    // ❌ Jangan pakai crossorigin di Telegram WebView
-    video.removeAttribute('crossorigin');
-
-    // ⏱️ Delay kecil supaya WebView siap
-    setTimeout(() => {
-        video.src = finalUrl;
+        // 🔥 CRITICAL FIX untuk Telegram WebView
+        video.pause();
+        video.removeAttribute('src');
         video.load();
-    }, 50);
-}
+
+        // ⚡ Attributes yang WAJIB untuk Telegram
+        video.setAttribute('playsinline', '');
+        video.setAttribute('webkit-playsinline', '');
+        video.setAttribute('x-webkit-airplay', 'deny');
+        video.setAttribute('disablePictureInPicture', '');
+        video.setAttribute('controlsList', 'nodownload');
+        
+        // ❌ JANGAN pakai crossorigin di Telegram
+        video.removeAttribute('crossorigin');
+        
+        // 🎯 Set preload strategy
+        video.preload = 'metadata';
+
+        // ⏱️ Delay untuk Telegram WebView
+        setTimeout(() => {
+            video.src = finalUrl;
+            video.load();
+            
+            // Auto-play setelah load (optional)
+            setTimeout(() => {
+                video.play().catch(err => {
+                    console.log('Autoplay prevented:', err);
+                    // Normal - user harus tap play
+                });
+            }, 500);
+        }, 100);
+    }
 
     
     setupEventListeners() {
         if (!this.videoPlayer) return;
 
         this.videoPlayer.addEventListener('loadeddata', this.handleVideoLoaded.bind(this));
+        this.videoPlayer.addEventListener('loadedmetadata', this.handleVideoLoaded.bind(this));
         this.videoPlayer.addEventListener('canplay', this.handleVideoCanPlay.bind(this));
+        this.videoPlayer.addEventListener('canplaythrough', this.handleVideoCanPlay.bind(this));
         this.videoPlayer.addEventListener('playing', this.handleVideoPlaying.bind(this));
         this.videoPlayer.addEventListener('pause', this.handleVideoPause.bind(this));
         this.videoPlayer.addEventListener('timeupdate', this.handleTimeUpdate.bind(this));
         this.videoPlayer.addEventListener('ended', this.handleVideoEnded.bind(this));
         this.videoPlayer.addEventListener('error', this.handleVideoError.bind(this));
         this.videoPlayer.addEventListener('waiting', this.handleVideoWaiting.bind(this));
+        this.videoPlayer.addEventListener('stalled', this.handleVideoWaiting.bind(this));
 
         if (this.playPauseButton) {
             this.playPauseButton.addEventListener('click', this.togglePlayPause.bind(this));
@@ -480,6 +493,9 @@ setVideoSource(videoUrl) {
         if (error) {
             console.error('Video error code:', error.code);
             console.error('Video error message:', error.message);
+            console.error('Video src:', this.videoPlayer.src);
+            console.error('Video networkState:', this.videoPlayer.networkState);
+            console.error('Video readyState:', this.videoPlayer.readyState);
             
             switch (error.code) {
                 case error.MEDIA_ERR_ABORTED:
@@ -492,7 +508,7 @@ setVideoSource(videoUrl) {
                     errorMessage = 'Video decoding error. Format may not be supported.';
                     break;
                 case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
-                    errorMessage = 'Video format not supported or file not found.';
+                    errorMessage = 'Video format not supported. This may be a Telegram WebView compatibility issue.';
                     break;
             }
         }
