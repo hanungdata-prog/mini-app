@@ -8,9 +8,7 @@ export default {
       "Access-Control-Allow-Credentials": "true"
     };
 
-    // =========================
     // PREFLIGHT & HEAD
-    // =========================
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: cors });
     }
@@ -28,18 +26,14 @@ export default {
 
     const url = new URL(request.url);
 
-    // =========================
     // HELPERS
-    // =========================
     const json = (data, status = 200) =>
       new Response(JSON.stringify(data), {
         status,
         headers: { ...cors, "Content-Type": "application/json" }
       });
 
-    // =========================
-    // BASE64URL UTILS (ANTI ERROR)
-    // =========================
+    // BASE64URL UTILS
     const base64urlEncode = (uint8) =>
       btoa(String.fromCharCode(...uint8))
         .replace(/\+/g, "-")
@@ -52,9 +46,7 @@ export default {
       return Uint8Array.from(atob(str), c => c.charCodeAt(0));
     };
 
-    // =========================
-    // TOKEN UTILS (FIXED)
-    // =========================
+    // TOKEN UTILS
     const signToken = async (payload) => {
       const payloadBytes = new TextEncoder().encode(JSON.stringify(payload));
 
@@ -108,36 +100,96 @@ export default {
       return valid ? payload : null;
     };
 
+    // SUPABASE HELPER
+    const querySupabase = async (code) => {
+      try {
+        const response = await fetch(
+          `${env.SUPABASE_URL}/rest/v1/videos?deep_link_code=eq.${code}&select=*`,
+          {
+            headers: {
+              'apikey': env.SUPABASE_SERVICE_KEY,
+              'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+
+        if (!response.ok) {
+          console.error('Supabase error:', response.status, await response.text());
+          return null;
+        }
+
+        const data = await response.json();
+        return data && data.length > 0 ? data[0] : null;
+      } catch (e) {
+        console.error('Supabase query error:', e);
+        return null;
+      }
+    };
+
     // =========================
     // API: VIDEO METADATA
     // =========================
     if (url.pathname === "/api/video") {
       try {
         const code = url.searchParams.get("code");
-        if (!code) return json({ error: "invalid code" }, 400);
+        if (!code) {
+          return json({ error: "Missing video code" }, 400);
+        }
 
-        // === AMBIL VIDEO DARI DATABASE (SINGKATKAN) ===
-        // video.video_url HARUS path R2 (contoh: videos/film1.mp4)
-        const video = {
-          title: "Sample Video",
-          description: "Streaming test",
-          video_url: "videos/sample.mp4"
-        };
+        console.log('Fetching video with code:', code);
 
+        // Query database untuk mendapatkan video berdasarkan deep_link_code
+        const video = await querySupabase(code);
+
+        if (!video) {
+          console.error('Video not found for code:', code);
+          return json({ 
+            error: "Video not found",
+            message: "Video dengan code tersebut tidak ditemukan di database"
+          }, 404);
+        }
+
+        console.log('Video found:', {
+          id: video.video_id,
+          title: video.title,
+          path: video.video_url
+        });
+
+        // Validasi video_url ada
+        if (!video.video_url) {
+          console.error('Video URL is empty for code:', code);
+          return json({ 
+            error: "Invalid video data",
+            message: "Video tidak memiliki URL yang valid"
+          }, 500);
+        }
+
+        // Generate token untuk streaming
         const token = await signToken({
           path: video.video_url,
-          exp: Date.now() + 5 * 60 * 1000 // 5 menit
+          video_id: video.video_id,
+          exp: Date.now() + 60 * 60 * 1000 // 1 jam
         });
 
         return json({
-          title: video.title,
-          description: video.description,
-          stream_url: `/api/video/stream?token=${token}` // ⬅️ TANPA encodeURIComponent
+          title: video.title || "Untitled Video",
+          description: video.description || "",
+          video_id: video.video_id,
+          stream_url: `/api/video/stream?token=${token}`,
+          thumbnail_url: video.thumbnail_url,
+          category: video.category,
+          access: {
+            has_access: true
+          }
         });
 
       } catch (e) {
-        console.error(e);
-        return json({ error: "server error" }, 500);
+        console.error('API error:', e);
+        return json({ 
+          error: "Server error",
+          message: e.message 
+        }, 500);
       }
     }
 
@@ -148,26 +200,54 @@ export default {
       try {
         const token = url.searchParams.get("token");
         if (!token) {
-          return new Response("Forbidden", { status: 403, headers: cors });
+          console.error('Missing token');
+          return new Response("Forbidden: Missing token", { 
+            status: 403, 
+            headers: cors 
+          });
         }
 
         const payload = await verifyToken(token);
         if (!payload || !payload.path) {
-          return new Response("Token invalid/expired", {
+          console.error('Invalid token or missing path');
+          return new Response("Token invalid or expired", {
             status: 403,
             headers: cors
           });
         }
 
+        console.log('Streaming from R2 path:', payload.path);
+
         const range = request.headers.get("Range");
 
+        // Fetch dari R2
         const object = await env.R2_BUCKET.get(payload.path, {
           range: range ? parseRange(range) : undefined
         });
 
         if (!object) {
-          return new Response("Not Found", { status: 404, headers: cors });
+          console.error('Object not found in R2:', payload.path);
+          
+          // Coba dengan underscore jika gagal
+          const altPath = payload.path.replace('Bagian_001', 'Bagian001');
+          console.log('Trying alternative path:', altPath);
+          
+          const altObject = await env.R2_BUCKET.get(altPath, {
+            range: range ? parseRange(range) : undefined
+          });
+          
+          if (!altObject) {
+            return new Response("Video file not found in storage", { 
+              status: 404, 
+              headers: cors 
+            });
+          }
+          
+          // Use alternative object
+          return streamObject(altObject, range, headers, cors);
         }
+
+        console.log('R2 object found, size:', object.size);
 
         const headers = new Headers(cors);
         headers.set("Content-Type", object.httpMetadata?.contentType || "video/mp4");
@@ -176,10 +256,13 @@ export default {
         headers.set("Cache-Control", "public, max-age=3600");
         headers.set("X-Content-Type-Options", "nosniff");
 
-        // === RANGE RESPONSE (WAJIB 206) ===
+        // RANGE RESPONSE (206)
         if (range) {
           if (!object.range) {
-            return new Response("Range Not Satisfiable", { status: 416, headers });
+            return new Response("Range Not Satisfiable", { 
+              status: 416, 
+              headers 
+            });
           }
 
           const { offset, end } = object.range;
@@ -192,13 +275,16 @@ export default {
           return new Response(object.body, { status: 206, headers });
         }
 
-        // === FULL RESPONSE ===
+        // FULL RESPONSE (200)
         headers.set("Content-Length", String(object.size));
         return new Response(object.body, { status: 200, headers });
 
       } catch (e) {
         console.error("Stream error:", e);
-        return new Response("Stream error", { status: 500, headers: cors });
+        return new Response(`Stream error: ${e.message}`, { 
+          status: 500, 
+          headers: cors 
+        });
       }
     }
 
@@ -206,9 +292,7 @@ export default {
   }
 };
 
-// =========================
 // RANGE HELPER
-// =========================
 function parseRange(range) {
   const m = range.match(/bytes=(\d+)-(\d*)/);
   if (!m) return undefined;
